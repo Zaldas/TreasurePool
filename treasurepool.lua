@@ -273,12 +273,12 @@ end);
 -- Hardcoded table of items and their lots
 -- lot/pass support not yet working
 local dTreasurePool = {
-    {name = "Suzaku's Sune-Ate", lot = 987, lotWinner = "Alexander", status = TreasureStatus.Lot},
+    {name = "Suzaku's Sune-Ate", lot = 987, lotWinner = "George", status = TreasureStatus.Winner},
     {name = "Crystal Orb", lot = 123, lotWinner = "Beatrice", status = TreasureStatus.Lot},
     {name = "Magic Shield", lot = 56, lotWinner = "Charlotte", status = TreasureStatus.Pass},
     {name = "Enchanted Rod", lot = 0, lotWinner = "", status = TreasureStatus.None},
     {name = "Dragon Helm", lot = 234, lotWinner = "Eleanor", status = TreasureStatus.Lot},
-    {name = "Wizard Cloak", lot = 567, lotWinner = "Fiona", status = TreasureStatus.Pass},
+    {name = "Wizard Cloak", lot = 0, lotWinner = "", status = TreasureStatus.Pass},
     {name = "Silver Ring", lot = 890, lotWinner = "George", status = TreasureStatus.Winner},
     {name = "Healing Potion", lot = 0, lotWinner = "", status = TreasureStatus.None},
     {name = "Mystic Boots", lot = 8, lotWinner = "Isabella", status = TreasureStatus.Lot},
