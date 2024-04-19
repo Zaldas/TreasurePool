@@ -12,7 +12,7 @@ Color States
 
 Commands
 - /treasurepool - bring up help
-- /treasurepool debug [#] - displays debug visual, # optional parameter 1-10 display items in treasure pool
+- /treasurepool debug [#] - toggle debug visual, # optional parameter 1-10 display items in treasure pool
 - /treasurepool setx # - setx anchor point for addon
 - /treasurepool sety # - sety anchor point for addon
   
