@@ -182,13 +182,13 @@ local function addItem(i, name, lot, winner, status)
     local lotText = '';
     local lotColor = getTreasureStatusColor(status);
     tpText[i].name:set_text(name);
-    if winner == '' then
+    if status ~= TreasureStatus.Pass then
+        if winner == '' then
         -- if no one lotted yet
-        if status ~= TreasureStatus.Pass then
             lotText = string.format("%s", formatLot(lot));
+        else
+            lotText = string.format("%s:%s", formatLot(lot), winner);
         end
-    else
-        lotText = string.format("%s:%s", formatLot(lot), winner);
     end
     tpText[i].lot:set_text(tostring(lotText));
 
@@ -273,16 +273,16 @@ end);
 -- Hardcoded table of items and their lots
 -- lot/pass support not yet working
 local dTreasurePool = {
-    {name = "Suzaku's Sune-Ate", lot = 987, lotWinner = "George", status = TreasureStatus.Winner},
-    {name = "Crystal Orb", lot = 123, lotWinner = "Beatrice", status = TreasureStatus.Lot},
-    {name = "Magic Shield", lot = 56, lotWinner = "Charlotte", status = TreasureStatus.Pass},
-    {name = "Enchanted Rod", lot = 0, lotWinner = "", status = TreasureStatus.None},
-    {name = "Dragon Helm", lot = 234, lotWinner = "Eleanor", status = TreasureStatus.Lot},
-    {name = "Wizard Cloak", lot = 0, lotWinner = "", status = TreasureStatus.Pass},
-    {name = "Silver Ring", lot = 890, lotWinner = "George", status = TreasureStatus.Winner},
-    {name = "Healing Potion", lot = 0, lotWinner = "", status = TreasureStatus.None},
-    {name = "Mystic Boots", lot = 8, lotWinner = "Isabella", status = TreasureStatus.Lot},
-    {name = "Golden Coin", lot = 901, lotWinner = "Jacob", status = TreasureStatus.Lot}
+    {name = "Suzaku's Sune-Ate", lot = 987, lotWinner = "George", winningLot = 987},
+    {name = "Crystal Orb", lot = 123, lotWinner = "Beatrice", winningLot = 243},
+    {name = "Magic Shield", lot = 56, lotWinner = "Charlotte", winningLot = 756},
+    {name = "Enchanted Rod", lot = 0, lotWinner = "", winningLot = 0},
+    {name = "Dragon Helm", lot = 65535, lotWinner = "Eleanor", winningLot = 720},
+    {name = "Wizard Cloak", lot = 0, lotWinner = "", winningLot = 0},
+    {name = "Silver Ring", lot = 890, lotWinner = "George", winningLot = 890},
+    {name = "Healing Potion", lot = 65535, lotWinner = "", winningLot = 0},
+    {name = "Mystic Boots", lot = 8, lotWinner = "Isabella", winningLot = 52},
+    {name = "Golden Coin", lot = 901, lotWinner = "Jacob", winningLot = 997},
 }
 
 local function clearTreasurePool()
@@ -316,7 +316,8 @@ ashita.events.register('d3d_present', 'present_cb', function ()
         local count = 0;
         for i, item in ipairs(dTreasurePool) do
             --print(i .. ". " .. item.name .. " - Lot: " .. item.lot)
-            addItem(i, item.name, item.lot, item.lotWinner, item.status);
+            local tStatus = getTreasureStatus(item.lot, item.winningLot);
+            addItem(i, item.name, item.winningLot, item.lotWinner, tStatus);
             count = i;
             if i == treasurepool.debugCount then
                 break;
