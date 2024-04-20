@@ -274,7 +274,7 @@ end);
 -- lot/pass support not yet working
 local dTreasurePool = {
     {name = "Suzaku's Sune-Ate", lot = 987, lotWinner = "George", winningLot = 987},
-    {name = "Crystal Orb", lot = 123, lotWinner = "Beatrice", winningLot = 243},
+    {name = "Crystal Orb", lot = 0, lotWinner = "Beatrice", winningLot = 243},
     {name = "Magic Shield", lot = 56, lotWinner = "Charlotte", winningLot = 756},
     {name = "Enchanted Rod", lot = 0, lotWinner = "", winningLot = 0},
     {name = "Dragon Helm", lot = 65535, lotWinner = "Eleanor", winningLot = 720},
