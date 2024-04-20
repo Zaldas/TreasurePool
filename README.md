@@ -1,3 +1,5 @@
+All credit to Shiyo for putting together framework
+
 Treasure Pool Visual Update
 - Swap to GDIFonts Libray (https://github.com/ThornyFFXI/gdifonts)
 - All values configurable in settings file
