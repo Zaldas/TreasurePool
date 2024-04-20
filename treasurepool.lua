@@ -1,6 +1,6 @@
 addon.name      = 'TreasurePool';
-addon.author    = 'Shiyo';
-addon.version   = '1.0.0.0';
+addon.author    = 'Shiyo, Zaldas';
+addon.version   = '1.1.0.0';
 addon.desc      = 'Displays your current treasure pool.';
 addon.link      = 'https://ashitaxi.com/';
 
