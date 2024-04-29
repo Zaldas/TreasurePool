@@ -265,6 +265,7 @@ local UpdateSettings = function(settings)
 end
 
 ashita.events.register('load', 'load_cb', function ()
+    treasurepool.settings = settings.load(default_settings);
     initTreasurePoolText();
     layoutTreasurePool();
     settings.register('settings', 'settingchange', UpdateSettings);
