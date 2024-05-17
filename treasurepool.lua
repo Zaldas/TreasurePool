@@ -266,7 +266,10 @@ ashita.events.register('load', 'load_cb', function ()
 
     settings.register('settings', 'settings_update', function(s)
         if (s ~= nil) then
-            treasurepool.settings = s
+            treasurepool.settings = s;
+
+            initTreasurePoolText();
+            layoutTreasurePool();       
         end
     end)
 end);
