@@ -260,15 +260,15 @@ local function layoutTreasurePool()
     tpBgRect:set_position_y(s.anchor.y - l.bg_y_offset);
 end
 
-local UpdateSettings = function(settings)
-    treasurepool.settings = settings;
-end
-
 ashita.events.register('load', 'load_cb', function ()
-    treasurepool.settings = settings.load(default_settings);
     initTreasurePoolText();
     layoutTreasurePool();
-    settings.register('settings', 'settingchange', UpdateSettings);
+
+    settings.register('settings', 'settings_update', function(s)
+        if (s ~= nil) then
+            treasurepool.settings = s
+        end
+    end)
 end);
 
 -- Hardcoded table of items and their lots
