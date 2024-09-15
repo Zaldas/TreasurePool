@@ -182,14 +182,14 @@ local function addItem(i, name, lot, winner, status)
     local lotText = '';
     local lotColor = getTreasureStatusColor(status);
     tpText[i].name:set_text(name);
-    if status ~= TreasureStatus.Pass then
+    --if status ~= TreasureStatus.Pass then
         if winner == '' then
         -- if no one lotted yet
             lotText = string.format("%s", formatLot(lot));
         else
             lotText = string.format("%s:%s", formatLot(lot), winner);
         end
-    end
+    --end
     tpText[i].lot:set_text(tostring(lotText));
 
     tpText[i].name:set_font_color(lotColor);
