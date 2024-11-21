@@ -115,7 +115,7 @@ local default_settings = T{
         visible = false,
     },
     bgRect = {
-        width = 350,
+        width = 360,
         height = 45,
         corner_rounding = 5,
         outline_color = 0xFF000000,
@@ -286,7 +286,7 @@ local dTreasurePool = {
     {name = "Silver Ring", lot = 890, lotWinner = "George", winningLot = 890},
     {name = "Healing Potion", lot = 65535, lotWinner = "", winningLot = 0},
     {name = "Mystic Boots", lot = 8, lotWinner = "Isabella", winningLot = 52},
-    {name = "Golden Coin", lot = 901, lotWinner = "Jacob", winningLot = 997},
+    {name = "Golden Coin", lot = 901, lotWinner = "Somewhatdamaged", winningLot = 997},
 }
 
 local function clearTreasurePool()
