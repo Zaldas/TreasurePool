@@ -178,7 +178,6 @@ end
 
 -- Function to add an item and its lot result
 local function addItem(i, name, lot, winner, status)
-    local s = treasurepool.settings;
     local lotText = '';
     local lotColor = getTreasureStatusColor(status);
     tpText[i].name:set_text(name);
