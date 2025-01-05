@@ -260,6 +260,7 @@ local function layoutTreasurePool()
 end
 
 ashita.events.register('load', 'load_cb', function ()
+    treasurepool.settings = settings.load(default_settings);
     initTreasurePoolText();
     layoutTreasurePool();
 
