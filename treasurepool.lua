@@ -357,6 +357,7 @@ ashita.events.register('d3d_present', 'present_cb', function ()
 end);
 
 ashita.events.register('unload', 'unload_cb', function ()
+    clearTreasurePool();
     destroyTreasurePoolText();
     gdi:destroy_interface();
 end);
