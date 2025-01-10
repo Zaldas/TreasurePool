@@ -98,7 +98,7 @@ local default_settings = T{
     },
     tpItemFont = {
         font_color = 0xFFD3D3D3,
-        font_family = 'Lucida Sans Unicode', -- This could be Arial but we need to use a font that is most likely installed by default
+        font_family = 'Lucida Sans Unicode',
         font_height = 16,
         outline_color = 0xFFB2BEB5,
         outline_width = 0,
@@ -107,7 +107,7 @@ local default_settings = T{
 	tpHeaderFont = {
         font_alignment = gdi.Alignment.Center,
         font_color = 0xFF9FC8F2,
-        font_family = 'Arial', -- This could be Arial but we need to use a font that is most likely installed by default
+        font_family = 'Arial',
         font_flags = gdi.FontFlags.Underline,
         font_height = 24,
         outline_color = 0xFF0041AB,
@@ -123,7 +123,6 @@ local default_settings = T{
         fill_color = 0xBF010640,
         gradient_style = gdi.Gradient.TopToBottom,
         gradient_color = 0x59010640,
-        
         visible = false,
         z_order = -1,
     }
@@ -275,7 +274,7 @@ local function addItem(i, name, lot, winner, status)
 end
 
 local function GetTreasureData()
-    local outTable = T{};
+    local outTable = {};
     for i = 0,9 do
         local treasureItem = AshitaCore:GetMemoryManager():GetInventory():GetTreasurePoolItem(i);
         if treasureItem and (treasureItem.ItemId > 0) then
@@ -289,15 +288,15 @@ end
 -----------------------------------------------------
 -- Event Handlers
 ashita.events.register('load', 'load_cb', function()
-    treasurepool.settings = settings.load(default_settings)
-    initTreasurePoolText()
-    layoutTreasurePool()
+    treasurepool.settings = settings.load(default_settings);
+    initTreasurePoolText();
+    layoutTreasurePool();
     settings.register('settings', 'settings_update', function(s)
+        destroyTreasurePoolText();
         if s then
-            treasurepool.settings = s
-            destroyTreasurePoolText()
-            initTreasurePoolText()
-            layoutTreasurePool()
+            treasurepool.settings = s;
+            initTreasurePoolText();
+            layoutTreasurePool();
         end
     end)
 end)
@@ -330,6 +329,7 @@ local function getTreasureStatus(lot, winningLot)
 end
 
 ashita.events.register('d3d_present', 'present_cb', function ()
+    if not settings.logged_in then return end;
     local l = treasurepool.settings.layoutOffset;
     if treasurepool.debug then
         clearTreasurePool();
@@ -376,7 +376,6 @@ ashita.events.register('unload', 'unload_cb', function()
     treasurepool.debug = false;
     clearTreasurePool();           -- Reset visibility of all UI elements
     destroyTreasurePoolText();     -- Destroy all GDI objects
-    gdi:clear_objects();
     gdi:destroy_interface();       -- Clean up the GDI interface
 end)
 
