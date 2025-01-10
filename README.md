@@ -4,7 +4,7 @@ Treasure Pool Visual Update
 - Swap to GDIFonts Libray (https://github.com/ThornyFFXI/gdifonts)
 - All values configurable in settings file
 
-![image](https://github.com/Zaldas/TreasurePool/assets/124407303/19a4f75f-ff5b-4a62-88da-7b45fd4f2b0c)
+![image](https://github.com/user-attachments/assets/34783d60-44d0-4e79-859a-e19836ce4fd0)
 
 Color States
 - Default/White - No Action Taken
