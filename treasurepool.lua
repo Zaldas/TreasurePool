@@ -129,7 +129,7 @@ local default_settings = T{
     }
 };
 
-local treasurepool = T{
+local treasurepool = {
 	settings = nil,
     -- Debug variable for testing/positioning
     debug = false,
@@ -138,7 +138,7 @@ local treasurepool = T{
 };
 
 -- Table to hold all items and their lots, and header
-local tpText = {}
+local tpText = {};
 local tpTitle = nil;
 local tpBgRect = nil;
 
