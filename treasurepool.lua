@@ -130,7 +130,7 @@ local default_settings = T{
 };
 
 local treasurepool = T{
-	settings = settings.load(default_settings),
+	settings = nil,
     -- Debug variable for testing/positioning
     debug = false,
     debugCount = 10,
@@ -142,6 +142,82 @@ local tpText = {}
 local tpTitle = nil;
 local tpBgRect = nil;
 
+-----------------------------------------------------
+-- Utility Functions
+local function layoutTextEntry(entry, base_x, base_y, offsets, row)
+    entry.name:set_font_alignment(gdi.Alignment.Left)
+    entry.name:set_position_x(base_x - offsets.item_x_offset)
+    entry.name:set_position_y(base_y + row * offsets.y_offset)
+
+    entry.lot:set_font_alignment(gdi.Alignment.Left)
+    entry.lot:set_position_x(base_x + offsets.x_offset)
+    entry.lot:set_position_y(base_y + row * offsets.y_offset)
+end
+
+local function createTextEntry(font)
+    return {
+        name = gdi:create_object(font),
+        lot = gdi:create_object(font),
+    }
+end
+
+local function initTreasurePoolText()
+    local s = treasurepool.settings;
+    for i = 1, 10 do
+        tpText[i] = createTextEntry(s.tpItemFont);
+    end
+    tpTitle = gdi:create_object(s.tpHeaderFont);
+    tpTitle:set_text('Treasure Pool');
+    tpBgRect = gdi:create_rect(s.bgRect, false);
+end
+
+local function destroyTreasurePoolText()
+    if tpText then
+        for _, entry in ipairs(tpText) do
+            if entry.name then gdi:destroy_object(entry.name); end
+            if entry.lot then gdi:destroy_object(entry.lot); end
+        end
+        tpText = {}; -- Clear the table
+    end
+
+    if tpTitle then
+        gdi:destroy_object(tpTitle);
+        tpTitle = nil;
+    end
+
+    if tpBgRect then
+        gdi:destroy_object(tpBgRect);
+        tpBgRect = nil;
+    end
+end
+
+local function layoutTreasurePool()
+    local s = treasurepool.settings;
+    local l = s.layoutOffset;
+    for i, entry in ipairs(tpText) do
+        layoutTextEntry(entry, s.anchor.x, s.anchor.y, l, i - 1);
+    end
+
+    tpTitle:set_position_x(s.anchor.x + (s.bgRect.width / 2 - l.item_x_offset) / 2);
+    tpTitle:set_position_y(s.anchor.y - l.header_y_offset);
+
+    tpBgRect:set_position_x(s.anchor.x - l.bg_x_offset);
+    tpBgRect:set_position_y(s.anchor.y - l.bg_y_offset);
+end
+
+local function clearTreasurePool()
+    local defColor = treasurepool.settings.colors.default;
+    for _, entry in ipairs(tpText) do
+        entry.name:set_visible(false);
+        entry.lot:set_visible(false);
+        entry.name:set_font_color(defColor);
+        entry.lot:set_font_color(defColor);
+   end
+    if tpTitle then tpTitle:set_visible(false); end
+    if tpBgRect then tpBgRect:set_visible(false); end
+end
+-----------------------------------------------------
+--- Treasure Pool data functions
 local function formatLot(lot)
     if lot == nil then
         return;
@@ -210,69 +286,21 @@ local function GetTreasureData()
     end
     return outTable;
 end
-
--- create treasure pool objects
-local function initTreasurePoolText()
-    local s = treasurepool.settings;
-    for i = 1, 10 do
-        table.insert(tpText, {
-            name = gdi:create_object(s.tpItemFont),
-            lot = gdi:create_object(s.tpItemFont),
-        })
-    end
-    
-    tpTitle = gdi:create_object(s.tpHeaderFont);
-    tpTitle:set_text('Treasure Pool');
-
-    tpBgRect = gdi:create_rect(s.bgRect, false);
-end
-
-local function destroyTreasurePoolText()
-    for i = 1, 10 do
-        gdi:destroy_object(tpText[i].name);
-        gdi:destroy_object(tpText[i].lot);
-    end
-    
-    gdi:destroy_object(tpTitle);
-    gdi:destroy_object(tpBgRect);
-end
-
--- layout trasure pool objects
-local function layoutTreasurePool()
-    local s = treasurepool.settings;
-    local l = s.layoutOffset;
-    for i = 1, 10 do
-        tpText[i].name:set_font_alignment(gdi.Alignment.Left);
-        tpText[i].name:set_position_x(s.anchor.x - l.item_x_offset);
-        tpText[i].name:set_position_y(s.anchor.y + (i-1) * l.y_offset);
-
-        tpText[i].lot:set_font_alignment(gdi.Alignment.Left);
-        tpText[i].lot:set_position_x(s.anchor.x + l.x_offset);
-        tpText[i].lot:set_position_y(s.anchor.y + (i-1) * l.y_offset);
-    end
-    
-    local title_x_offset = (s.bgRect.width/2 - l.item_x_offset) / 2;
-    tpTitle:set_position_x(s.anchor.x + title_x_offset);
-    tpTitle:set_position_y(s.anchor.y - l.header_y_offset);
-
-    tpBgRect:set_position_x(s.anchor.x - l.bg_x_offset);
-    tpBgRect:set_position_y(s.anchor.y - l.bg_y_offset);
-end
-
-ashita.events.register('load', 'load_cb', function ()
-    treasurepool.settings = settings.load(default_settings);
-    initTreasurePoolText();
-    layoutTreasurePool();
-
+-----------------------------------------------------
+-- Event Handlers
+ashita.events.register('load', 'load_cb', function()
+    treasurepool.settings = settings.load(default_settings)
+    initTreasurePoolText()
+    layoutTreasurePool()
     settings.register('settings', 'settings_update', function(s)
-        if (s ~= nil) then
-            treasurepool.settings = s;
-
-            initTreasurePoolText();
-            layoutTreasurePool();       
+        if s then
+            treasurepool.settings = s
+            destroyTreasurePoolText()
+            initTreasurePoolText()
+            layoutTreasurePool()
         end
     end)
-end);
+end)
 
 -- Hardcoded table of items and their lots
 -- lot/pass support not yet working
@@ -288,18 +316,6 @@ local dTreasurePool = {
     {name = "Mystic Boots", lot = 8, lotWinner = "Isabella", winningLot = 52},
     {name = "Golden Coin", lot = 901, lotWinner = "Somewhatdamaged", winningLot = 997},
 }
-
-local function clearTreasurePool()
-    local s = treasurepool.settings;
-    for i, item in ipairs(dTreasurePool) do
-        tpText[i].name:set_visible(false);
-        tpText[i].lot:set_visible(false);
-        tpText[i].name:set_font_color(s.colors.default);
-        tpText[i].lot:set_font_color(s.colors.default);
-    end
-    tpTitle:set_visible(false);
-    tpBgRect:set_visible(false);
-end
 
 local function getTreasureStatus(lot, winningLot)
     if lot > 0 and lot == winningLot then
@@ -356,11 +372,13 @@ ashita.events.register('d3d_present', 'present_cb', function ()
     end
 end);
 
-ashita.events.register('unload', 'unload_cb', function ()
-    clearTreasurePool();
-    destroyTreasurePoolText();
-    gdi:destroy_interface();
-end);
+ashita.events.register('unload', 'unload_cb', function()
+    treasurepool.debug = false;
+    clearTreasurePool();           -- Reset visibility of all UI elements
+    destroyTreasurePoolText();     -- Destroy all GDI objects
+    gdi:clear_objects();
+    gdi:destroy_interface();       -- Clean up the GDI interface
+end)
 
 ashita.events.register('command', 'treasurepool_command', function (e)
     -- Parse the command arguments..
