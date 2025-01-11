@@ -274,12 +274,13 @@ local function addItem(i, name, lot, winner, status)
 end
 
 local function GetTreasureData()
-    local outTable = {};
+    local outTable = T{};
     for i = 0,9 do
         local treasureItem = AshitaCore:GetMemoryManager():GetInventory():GetTreasurePoolItem(i);
         if treasureItem and (treasureItem.ItemId > 0) then
             local resource = AshitaCore:GetResourceManager():GetItemById(treasureItem.ItemId);
-            outTable:append({ Item=treasureItem, Resource = resource}); --This creates a table entry with both the resource and item.  This is all you care about.
+            --print("GetTreasureData: " ..  resource.Name[1]);
+            outTable:append({ Item = treasureItem, Resource = resource}); --This creates a table entry with both the resource and item.  This is all you care about.
             --outTable[#outTable + 1] = { Item=treasureItem, Resource = resource.Name };
         end
     end
