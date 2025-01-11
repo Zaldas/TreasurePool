@@ -1,4 +1,4 @@
-All credit to Shiyo for putting together framework
+All credit to Shiyo for putting together framework (https://github.com/ShiyoKozuki/TreasurePool)
 
 Treasure Pool Visual Update
 - Swap to GDIFonts Libray (https://github.com/ThornyFFXI/gdifonts)
