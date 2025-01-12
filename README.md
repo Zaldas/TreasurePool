@@ -7,7 +7,7 @@ Treasure Pool Visual Update
 ![image](https://github.com/user-attachments/assets/34783d60-44d0-4e79-859a-e19836ce4fd0)
 
 Color States
-- Default/White - No Action Taken
+- White/Default - No Action Taken
 - Blue/Pass - Pass On Item
 - Orange/Lot - Lot on Item, not winning lot
 - Gold/Lot - Lot on Item, winning lot
