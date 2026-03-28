@@ -134,7 +134,7 @@ function lootItem:update(entry, isHovered)
     local playerName = entry.playerName or 'You'
     if isHovered then
         if entry.lot == 65535 then
-            statusStr = playerName .. ': Pass'
+            statusStr = 'Passed'
         elseif entry.lot > 0 then
             statusStr = formatLot(entry.lot) .. ': ' .. playerName
         end
@@ -146,11 +146,17 @@ function lootItem:update(entry, isHovered)
     self.statusText:update(statusStr)
     self.statusText:color(statusColor)
 
-    local showButtons = (entry.lot == 0) and private[self].buttonsEnabled and isHovered
-    if showButtons then
+    local canAct = private[self].buttonsEnabled and isHovered
+    if canAct and entry.lot == 0 then
+        -- No action yet: both buttons available
         self.lotBtn:show(utils.VIS_TOKEN)
         self.passBtn:show(utils.VIS_TOKEN)
+    elseif canAct and entry.lot ~= 65535 then
+        -- Already lotted: can still pass, cannot re-lot
+        self.lotBtn:hide(utils.VIS_TOKEN)
+        self.passBtn:show(utils.VIS_TOKEN)
     else
+        -- Already passed, or not hovered: no buttons
         self.lotBtn:hide(utils.VIS_TOKEN)
         self.passBtn:hide(utils.VIS_TOKEN)
     end

@@ -1,4 +1,4 @@
-local WINDOW_W    = 300
+local WINDOW_W    = 250
 local HEADER_H    = 26
 local ROW_H       = 37
 local FOOTER_H    = 28

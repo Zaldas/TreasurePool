@@ -38,19 +38,27 @@ local default_settings = T{
     },
     showLotButtons = true,
     dragEnabled    = true,
-    debug          = false,
+    scale          = 0,    -- 0 = auto (resY/1440); >0 = custom multiplier (0.25-2.5)
     debugCount     = 10,
 }
 
 ------------------------------------------------------------
 -- Addon State
 ------------------------------------------------------------
-local tpSettings   = nil
-local settingsOpen = { false }
+local tpSettings       = nil
+local settingsOpen     = { false }
+local settingsWasOpen  = false
+local debugMode        = false  -- transient, never persisted
 
--- Compute uiScale from screen resolution (1440p baseline)
-local resY    = AshitaCore:GetConfigurationManager():GetFloat('boot', 'ffxi.registry', '0002', 768)
-local uiScale = resY / 1440
+-- Compute getEffectiveScale() from screen resolution (1440p baseline)
+local resY = AshitaCore:GetConfigurationManager():GetFloat('boot', 'ffxi.registry', '0002', 768)
+
+local function getEffectiveScale()
+    if tpSettings and tpSettings.scale and tpSettings.scale > 0 then
+        return tpSettings.scale
+    end
+    return resY / 1440
+end
 
 ------------------------------------------------------------
 -- Debug test data
@@ -142,7 +150,7 @@ local function gatherDebugData()
             name       = item.name,
             lot        = item.lot,
             winningLot = item.winningLot,
-            winnerName = item.lotWinner,
+            winnerName = item.lotWinner == 'You' and playerName or item.lotWinner,
             dropTime   = item.dropTime,
             playerName = playerName,
         }
@@ -155,7 +163,7 @@ end
 ------------------------------------------------------------
 local function wireCallbacks()
     lootWindow.onLotSlot = function(slot)
-        if tpSettings.debug then
+        if debugMode then
             print('[TreasurePool] Debug: Lot slot ' .. tostring(slot))
         else
             sendLotPacket(slot)
@@ -163,7 +171,7 @@ local function wireCallbacks()
     end
 
     lootWindow.onPassSlot = function(slot)
-        if tpSettings.debug then
+        if debugMode then
             print('[TreasurePool] Debug: Pass slot ' .. tostring(slot))
         else
             sendPassPacket(slot)
@@ -171,29 +179,33 @@ local function wireCallbacks()
     end
 
     lootWindow.onLotAll = function()
-        local items = tpSettings.debug and gatherDebugData() or gatherTreasureData()
+        local items = debugMode and gatherDebugData() or gatherTreasureData()
         state.addLotAll(items)
-        if tpSettings.debug then
+        if debugMode then
             print('[TreasurePool] Debug: Lot All queued')
         end
     end
 
     lootWindow.onPassAll = function()
-        local items = tpSettings.debug and gatherDebugData() or gatherTreasureData()
+        local items = debugMode and gatherDebugData() or gatherTreasureData()
         state.addPassAll(items)
-        if tpSettings.debug then
+        if debugMode then
             print('[TreasurePool] Debug: Pass All queued')
         end
     end
 end
 
+local function rebuildWindow()
+    lootWindow.destroy()
+    lootWindow.initialize(layout, tpSettings.anchor, getEffectiveScale())
+    lootWindow.dragEnabled = tpSettings.dragEnabled
+    wireCallbacks()
+end
+
 local function reloadLayout()
     package.loaded['layouts/default'] = nil
     layout = require('layouts/default')
-    lootWindow.destroy()
-    lootWindow.initialize(layout, tpSettings.anchor, uiScale)
-    lootWindow.dragEnabled = tpSettings.dragEnabled
-    wireCallbacks()
+    rebuildWindow()
     print('[TreasurePool] Layout reloaded.')
 end
 
@@ -203,7 +215,7 @@ end
 ashita.events.register('load', 'load_cb', function()
     tpSettings = settings.load(default_settings)
 
-    lootWindow.initialize(layout, tpSettings.anchor, uiScale)
+    lootWindow.initialize(layout, tpSettings.anchor, getEffectiveScale())
     lootWindow.dragEnabled = tpSettings.dragEnabled
     wireCallbacks()
 
@@ -211,7 +223,7 @@ ashita.events.register('load', 'load_cb', function()
         if s ~= nil then
             lootWindow.destroy()
             tpSettings = s
-            lootWindow.initialize(layout, tpSettings.anchor, uiScale)
+            lootWindow.initialize(layout, tpSettings.anchor, getEffectiveScale())
             lootWindow.dragEnabled = tpSettings.dragEnabled
             wireCallbacks()
         end
@@ -222,47 +234,125 @@ end)
 -- Event: Unload
 ------------------------------------------------------------
 ashita.events.register('unload', 'unload_cb', function()
-    tpSettings.debug = false
     lootWindow.destroy()
     state.reset()
 end)
 
 ------------------------------------------------------------
+-- Settings Window helpers
+------------------------------------------------------------
+local function drawGradientHeader(text)
+    local drawlist = imgui.GetWindowDrawList()
+    local avail    = imgui.GetContentRegionAvail()
+    local availW   = type(avail) == 'table' and avail[1] or avail
+    local x, y     = imgui.GetCursorScreenPos()
+    local lineH    = imgui.GetTextLineHeightWithSpacing()
+    local cL       = imgui.GetColorU32({ 0.25, 0.40, 0.85, 1.00 })
+    local cR       = imgui.GetColorU32({ 0.25, 0.40, 0.85, 0.00 })
+    drawlist:AddRectFilledMultiColor({ x, y }, { x + availW * 0.75, y + lineH }, cL, cR, cR, cL)
+    imgui.SetCursorScreenPos({ x + 4, y + 2 })
+    imgui.Text(text)
+    local _, newY = imgui.GetCursorScreenPos()
+    imgui.SetCursorScreenPos({ x, newY })
+    imgui.Spacing()
+end
+
+local function styledButton(label, width, isPrimary)
+    imgui.PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0)
+    if isPrimary then
+        imgui.PushStyleColor(ImGuiCol_Button,        { 0.25, 0.40, 0.85, 1.00 })
+        imgui.PushStyleColor(ImGuiCol_ButtonHovered, { 0.30, 0.48, 0.95, 1.00 })
+        imgui.PushStyleColor(ImGuiCol_ButtonActive,  { 0.18, 0.32, 0.70, 1.00 })
+    else
+        imgui.PushStyleColor(ImGuiCol_Button,        { 0.00, 0.00, 0.00, 0.00 })
+        imgui.PushStyleColor(ImGuiCol_ButtonHovered, { 1.00, 1.00, 1.00, 0.12 })
+        imgui.PushStyleColor(ImGuiCol_ButtonActive,  { 1.00, 1.00, 1.00, 0.20 })
+    end
+    local clicked = imgui.Button(label, { width, 0 })
+    imgui.PopStyleColor(3)
+    imgui.PopStyleVar(1)
+    return clicked
+end
+
+------------------------------------------------------------
 -- Settings Window (ImGui)
 ------------------------------------------------------------
 local function drawSettingsWindow()
+    -- Reset debug when the window is closed
+    if settingsWasOpen and not settingsOpen[1] then
+        debugMode = false
+    end
+    settingsWasOpen = settingsOpen[1]
+
     if not settingsOpen[1] then return end
 
-    imgui.SetNextWindowSize({ 260, 110 }, ImGuiCond_FirstUseEver)
-    if imgui.Begin('TreasurePool Settings', settingsOpen) then
+    local indent = 6
+    imgui.PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0)
+    if imgui.Begin('TreasurePool Settings', settingsOpen, ImGuiWindowFlags_AlwaysAutoResize) then
+        local avail  = imgui.GetContentRegionAvail()
+        local availW = type(avail) == 'table' and avail[1] or avail
+
+        -- Display section
+        drawGradientHeader('Display')
+
+        imgui.SetCursorPosX(imgui.GetCursorPosX() + indent)
         local drag = { tpSettings.dragEnabled }
         if imgui.Checkbox('Drag Enabled', drag) then
             tpSettings.dragEnabled = drag[1]
             lootWindow.dragEnabled = drag[1]
             settings.save()
         end
-        imgui.SameLine()
-        if imgui.Button('Reload Layout') then
-            reloadLayout()
+
+        imgui.SetCursorPosX(imgui.GetCursorPosX() + indent)
+        local customScaleOn = { (tpSettings.scale or 0) > 0 }
+        if imgui.Checkbox('Custom Scale', customScaleOn) then
+            tpSettings.scale = customScaleOn[1] and 1.0 or 0
+            settings.save()
+            rebuildWindow()
+        end
+        if customScaleOn[1] then
+            imgui.SameLine()
+            local scaleVal = { tpSettings.scale > 0 and tpSettings.scale or 1.0 }
+            imgui.SetNextItemWidth(120)
+            if imgui.SliderFloat('##scale', scaleVal, 0.25, 2.5, 'x%.2f') then
+                tpSettings.scale = scaleVal[1]
+                settings.save()
+                rebuildWindow()
+            end
         end
 
-        local dbg = { tpSettings.debug }
+        imgui.Spacing()
+
+        -- Debug section
+        drawGradientHeader('Debug')
+
+        imgui.SetCursorPosX(imgui.GetCursorPosX() + indent)
+        local dbg = { debugMode }
         if imgui.Checkbox('Debug Mode', dbg) then
-            tpSettings.debug = dbg[1]
+            debugMode = dbg[1]
         end
-        if tpSettings.debug then
+        if debugMode then
             imgui.SameLine()
             local cnt = { tpSettings.debugCount }
-            imgui.SetNextItemWidth(60)
-            if imgui.InputInt('Items', cnt) then
+            imgui.SetNextItemWidth(80)
+            if imgui.InputInt('Items##dbg', cnt) then
                 local v = cnt[1]
                 if v >= 1 and v <= 10 then
                     tpSettings.debugCount = v
                 end
             end
         end
+
+        imgui.Spacing()
+        imgui.Separator()
+        imgui.Spacing()
+
+        if styledButton('Reload Layout', availW, false) then
+            reloadLayout()
+        end
     end
     imgui.End()
+    imgui.PopStyleVar(1)
 end
 
 ------------------------------------------------------------
@@ -281,7 +371,7 @@ ashita.events.register('d3d_present', 'present_cb', function()
 
     -- Gather data
     local items
-    if tpSettings.debug then
+    if debugMode then
         items = gatherDebugData()
     else
         items = gatherTreasureData()
@@ -316,39 +406,5 @@ ashita.events.register('command', 'treasurepool_command', function(e)
         return
     end
     e.blocked = true
-
-    -- /treasurepool debug [#]
-    if #args >= 2 and args[2]:any('debug') then
-        tpSettings.debug = not tpSettings.debug
-        if #args == 3 then
-            local value = tonumber(args[3])
-            if value and value > 0 and value <= 10 then
-                tpSettings.debugCount = value
-                tpSettings.debug = true
-            end
-        end
-        print('[TreasurePool] Debug: ' .. tostring(tpSettings.debug))
-        return
-    end
-
-    -- /treasurepool buttons
-    if #args >= 2 and args[2]:any('buttons') then
-        tpSettings.showLotButtons = not tpSettings.showLotButtons
-        settings.save()
-        print('[TreasurePool] Lot buttons: ' .. tostring(tpSettings.showLotButtons))
-        return
-    end
-
-    -- /treasurepool settings
-    if #args >= 2 and args[2]:any('settings') then
-        settingsOpen[1] = not settingsOpen[1]
-        return
-    end
-
-    -- Help
-    local helpText = 'Treasure Pool:\n'
-    helpText = helpText .. '  /treasurepool debug [#] -- toggle debug mode; optional item count 1-10\n'
-    helpText = helpText .. '  /treasurepool buttons   -- toggle lot/pass buttons\n'
-    helpText = helpText .. '  /treasurepool settings  -- open settings window\n'
-    print(helpText)
+    settingsOpen[1] = not settingsOpen[1]
 end)

@@ -208,20 +208,25 @@ function lootWindow.update(items)
     end
 
     -- Update each item
-    local hasUnlotted = false
+    local hasUnlotted   = false
+    local hasActionable = false
     for i, item in ipairs(lootItems) do
         if items[i] then
             item:update(items[i], hoveredIdx == i)
-            if items[i].lot == 0 then hasUnlotted = true end
+            if items[i].lot == 0        then hasUnlotted   = true end
+            if items[i].lot ~= 65535    then hasActionable = true end
         end
     end
 
-    -- Footer button visibility
+    -- Footer button visibility: Lot All only for unlotted; Pass All for anything not yet passed
     if hasUnlotted then
         lotAllBtn:show(utils.VIS_TOKEN)
-        passAllBtn:show(utils.VIS_TOKEN)
     else
         lotAllBtn:hide(utils.VIS_TOKEN)
+    end
+    if hasActionable then
+        passAllBtn:show(utils.VIS_TOKEN)
+    else
         passAllBtn:hide(utils.VIS_TOKEN)
     end
 
