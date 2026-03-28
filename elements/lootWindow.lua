@@ -141,8 +141,8 @@ function lootWindow.initialize(layoutRef, anchorRef, scale)
     windowBg = uiImage.new({
         path  = 'layouts/assets/pixel.png',
         size  = { layout.window.width, layout.window.headerH },
-        pos   = { 0, 0 },
-        color = layout.window.bg.color,
+        pos         = { 0, 0 },
+        color       = layout.window.bg.color,
     }, engine)
     root:addChild(windowBg)
 
