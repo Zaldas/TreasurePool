@@ -4,6 +4,7 @@ local uiContainer = require('libs/spui/uiContainer')
 local uiText      = require('libs/spui/uiText')
 local uiButton    = require('libs/spui/uiButton')
 local uiBar       = require('libs/spui/uiBar')
+local uiImage     = require('libs/spui/uiImage')
 local utils       = require('libs/spui/utils')
 
 local lootItem = classes.class(uiContainer)
@@ -44,6 +45,9 @@ function lootItem:init(engine, layout)
         currentSlot    = nil,
     }
 
+    self.timerBar = uiBar.new(layout.timerBar, engine, 1.0)
+    self:addChild(self.timerBar)
+
     self.nameText = uiText.new(layout.nameText)
     self:addChild(self.nameText)
 
@@ -59,8 +63,8 @@ function lootItem:init(engine, layout)
     self.passBtn = uiButton.new(layout.passBtn, engine)
     self:addChild(self.passBtn)
 
-    self.timerBar = uiBar.new(layout.timerBar, engine, 1.0)
-    self:addChild(self.timerBar)
+    self.separator = uiImage.new(layout.separator, engine)
+    self:addChild(self.separator)
 end
 
 function lootItem:setPosition(x, y)
@@ -113,22 +117,36 @@ function lootItem:update(entry, isHovered)
     end
     self.timerText:color(d3dToRgba(timerD3D))
 
-    local statusStr   = '---'
-    local statusColor = { r = 170, g = 170, b = 170, a = 255 }
+    -- Color always reflects your state
+    local statusColor = { r = 220, g = 220, b = 220, a = 255 }  -- White: no action
     if entry.lot == 65535 then
-        statusStr   = 'You: Pass'
-        statusColor = { r = 115, g = 155, b = 208, a = 255 }
+        statusColor = { r = 100, g = 150, b = 220, a = 255 }  -- Blue: passed
     elseif entry.lot > 0 then
-        statusStr   = 'You: ' .. formatLot(entry.lot)
-        statusColor = { r = 254, g = 206, b = 67, a = 255 }
-    elseif entry.winningLot > 0 and entry.winnerName ~= '' then
-        statusStr   = entry.winnerName .. ': ' .. formatLot(entry.winningLot)
-        statusColor = { r = 220, g = 170, b = 80, a = 255 }
+        if entry.lot == entry.winningLot then
+            statusColor = { r = 255, g = 200, b = 50,  a = 255 }  -- Gold: winning
+        else
+            statusColor = { r = 255, g = 140, b = 40,  a = 255 }  -- Orange: losing
+        end
+    end
+
+    -- Text content: hover shows your state, default shows pool state
+    local statusStr = '---'
+    local playerName = entry.playerName or 'You'
+    if isHovered then
+        if entry.lot == 65535 then
+            statusStr = playerName .. ': Pass'
+        elseif entry.lot > 0 then
+            statusStr = formatLot(entry.lot) .. ': ' .. playerName
+        end
+    else
+        if entry.winningLot > 0 and entry.winnerName ~= '' then
+            statusStr = formatLot(entry.winningLot) .. ': ' .. entry.winnerName
+        end
     end
     self.statusText:update(statusStr)
     self.statusText:color(statusColor)
 
-    local showButtons = (entry.lot == 0) and private[self].buttonsEnabled
+    local showButtons = (entry.lot == 0) and private[self].buttonsEnabled and isHovered
     if showButtons then
         self.lotBtn:show(utils.VIS_TOKEN)
         self.passBtn:show(utils.VIS_TOKEN)
@@ -137,10 +155,17 @@ function lootItem:update(entry, isHovered)
         self.passBtn:hide(utils.VIS_TOKEN)
     end
 
+    self.lotBtn:update()
+    self.passBtn:update()
+
     local barValue = math.max(0, math.min(1, remaining / 300))
     self.timerBar:setValue(barValue)
-    self.timerBar:setColor(d3dToRgba(timerD3D))
+    local barColor = d3dToRgba(timerD3D)
+    barColor.a = 128
+    self.timerBar:setColor(barColor)
     self.timerBar:update()
+
+    self.separator:update()
 
     private[self].currentSlot = entry.slot
 end

@@ -44,12 +44,13 @@ function uiButton:init(layout, engine)
     self.btnEnabled = true
     self.onClick    = nil
 
-    -- Background image (pixel.png stretched to button size)
+    -- Background image (pixel.png stretched to button size, or custom path with optional 9-slice)
     self.bg = uiImage.new({
-        path  = 'layouts/assets/pixel.png',
-        size  = { w, h },
-        pos   = { 0, 0 },
-        color = '#FFFFFFFF',
+        path        = (layout and layout.path) or 'layouts/assets/pixel.png',
+        sliceBorder = (layout and layout.sliceBorder) or nil,
+        size        = { w, h },
+        pos         = { 0, 0 },
+        color       = '#FFFFFFFF',
     }, engine)
     self:addChild(self.bg)
 
