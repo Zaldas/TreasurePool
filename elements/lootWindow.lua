@@ -38,6 +38,7 @@ lootWindow.onLotSlot  = nil
 lootWindow.onPassSlot = nil
 lootWindow.onLotAll   = nil
 lootWindow.onPassAll  = nil
+lootWindow.dragEnabled = true
 
 ------------------------------------------------------------
 -- Local helpers
@@ -246,7 +247,7 @@ function lootWindow.handleMouse(e)
         mouseX = e.x
         mouseY = e.y
 
-        if hitTestHeader(e.x, e.y) then
+        if lootWindow.dragEnabled and hitTestHeader(e.x, e.y) then
             isDragging = true
             dragOff.x = e.x - anchor.x
             dragOff.y = e.y - anchor.y

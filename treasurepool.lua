@@ -5,6 +5,7 @@ addon.desc      = 'Displays your current treasure pool with lot/pass buttons.'
 addon.link      = 'https://ashitaxi.com/'
 
 require('common')
+local imgui      = require('imgui')
 local settings   = require('settings')
 local ffi        = require('ffi')
 local bit        = require('bit')
@@ -36,14 +37,16 @@ local default_settings = T{
         y = 200,
     },
     showLotButtons = true,
-    debug = false,
-    debugCount = 10,
+    dragEnabled    = true,
+    debug          = false,
+    debugCount     = 10,
 }
 
 ------------------------------------------------------------
 -- Addon State
 ------------------------------------------------------------
-local tpSettings = nil
+local tpSettings   = nil
+local settingsOpen = { false }
 
 -- Compute uiScale from screen resolution (1440p baseline)
 local resY    = AshitaCore:GetConfigurationManager():GetFloat('boot', 'ffxi.registry', '0002', 768)
@@ -138,14 +141,9 @@ local function gatherDebugData()
 end
 
 ------------------------------------------------------------
--- Event: Load
+-- Helpers
 ------------------------------------------------------------
-ashita.events.register('load', 'load_cb', function()
-    tpSettings = settings.load(default_settings)
-
-    lootWindow.initialize(layout, tpSettings.anchor, uiScale)
-
-    -- Wire callbacks
+local function wireCallbacks()
     lootWindow.onLotSlot = function(slot)
         if not tpSettings.debug then
             sendLotPacket(slot)
@@ -177,12 +175,35 @@ ashita.events.register('load', 'load_cb', function()
             print('[TreasurePool] Debug: Pass All queued')
         end
     end
+end
+
+local function reloadLayout()
+    package.loaded['layouts/default'] = nil
+    layout = require('layouts/default')
+    lootWindow.destroy()
+    lootWindow.initialize(layout, tpSettings.anchor, uiScale)
+    lootWindow.dragEnabled = tpSettings.dragEnabled
+    wireCallbacks()
+    print('[TreasurePool] Layout reloaded.')
+end
+
+------------------------------------------------------------
+-- Event: Load
+------------------------------------------------------------
+ashita.events.register('load', 'load_cb', function()
+    tpSettings = settings.load(default_settings)
+
+    lootWindow.initialize(layout, tpSettings.anchor, uiScale)
+    lootWindow.dragEnabled = tpSettings.dragEnabled
+    wireCallbacks()
 
     settings.register('settings', 'settings_update', function(s)
         if s ~= nil then
             lootWindow.destroy()
             tpSettings = s
             lootWindow.initialize(layout, tpSettings.anchor, uiScale)
+            lootWindow.dragEnabled = tpSettings.dragEnabled
+            wireCallbacks()
         end
     end)
 end)
@@ -197,9 +218,33 @@ ashita.events.register('unload', 'unload_cb', function()
 end)
 
 ------------------------------------------------------------
+-- Settings Window (ImGui)
+------------------------------------------------------------
+local function drawSettingsWindow()
+    if not settingsOpen[1] then return end
+
+    imgui.SetNextWindowSize({ 260, 80 }, ImGuiCond_FirstUseEver)
+    if imgui.Begin('TreasurePool Settings', settingsOpen) then
+        local drag = { tpSettings.dragEnabled }
+        if imgui.Checkbox('Drag Enabled', drag) then
+            tpSettings.dragEnabled    = drag[1]
+            lootWindow.dragEnabled    = drag[1]
+            settings.save()
+        end
+        imgui.SameLine()
+        if imgui.Button('Reload Layout') then
+            reloadLayout()
+        end
+    end
+    imgui.End()
+end
+
+------------------------------------------------------------
 -- Event: d3d_present (render every frame)
 ------------------------------------------------------------
 ashita.events.register('d3d_present', 'present_cb', function()
+    drawSettingsWindow()
+
     if not settings.logged_in then
         lootWindow.update({})
         return
@@ -268,9 +313,16 @@ ashita.events.register('command', 'treasurepool_command', function(e)
         return
     end
 
+    -- /treasurepool settings
+    if #args >= 2 and args[2]:any('settings') then
+        settingsOpen[1] = not settingsOpen[1]
+        return
+    end
+
     -- Help
     local helpText = 'Treasure Pool:\n'
     helpText = helpText .. '  /treasurepool debug [#] -- toggle debug mode; optional item count 1-10\n'
     helpText = helpText .. '  /treasurepool buttons   -- toggle lot/pass buttons\n'
+    helpText = helpText .. '  /treasurepool settings  -- open settings window\n'
     print(helpText)
 end)
