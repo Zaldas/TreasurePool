@@ -361,7 +361,7 @@ end
 ashita.events.register('d3d_present', 'present_cb', function()
     drawSettingsWindow()
 
-    if not settings.logged_in then
+    if not settings.logged_in and not debugMode then
         lootWindow.update({})
         return
     end
