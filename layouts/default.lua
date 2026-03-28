@@ -25,7 +25,7 @@ local layout = {
         footerH = FOOTER_H,
         pad     = PAD,
         bg = {
-            color = '#010640BF',
+            color = '#1A1A1ADD',
         },
     },
 
