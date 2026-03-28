@@ -25,6 +25,7 @@ local passAllBtn  = nil
 local lootItems   = {}
 local lastCount   = -1
 local hoveredIdx  = nil
+local pressedBtn  = nil
 local isDragging  = false
 local dragOff     = { x = 0, y = 0 }
 local mouseX      = 0
@@ -111,6 +112,16 @@ local function hitTestHeader(mx, my)
     return mx >= ax and mx < ax + W and my >= ay and my < ay + H
 end
 
+local function hitTestWindow(mx, my)
+    if not root or not root.absoluteVisibility then return false end
+    local ax = root.absolutePos.x
+    local ay = root.absolutePos.y
+    local W  = layout.window.width * root.absoluteScale.x
+    local n  = lastCount > 0 and lastCount or 0
+    local H  = (layout.window.headerH + n * layout.window.rowH + layout.window.footerH) * root.absoluteScale.y
+    return mx >= ax and mx < ax + W and my >= ay and my < ay + H
+end
+
 ------------------------------------------------------------
 -- Public API
 ------------------------------------------------------------
@@ -138,7 +149,6 @@ function lootWindow.initialize(layoutRef, anchorRef, scale)
     -- Title text
     titleText = uiText.new(layout.title)
     root:addChild(titleText)
-    titleText:update('Treasure Pool')
 
     -- Footer buttons (positions set in relayout)
     lotAllBtn  = uiButton.new(layout.footer.lotAllBtn, engine)
@@ -147,11 +157,13 @@ function lootWindow.initialize(layoutRef, anchorRef, scale)
     root:addChild(passAllBtn)
     lotAllBtn:hide(utils.VIS_TOKEN)
     passAllBtn:hide(utils.VIS_TOKEN)
-    lotAllBtn:setText('Lot All')
-    passAllBtn:setText('Pass All')
 
     -- Create all primitives
     root:createPrimitives()
+
+    titleText:update('Treasure Pool')
+    lotAllBtn:setText('Lot All')
+    passAllBtn:setText('Pass All')
 
     lootItems = {}
     lastCount = -1
@@ -174,6 +186,8 @@ function lootWindow.update(items)
         local item = lootItem.new(engine, layout.lootItem)
         item:setRowDimensions(layout.window.width, layout.window.rowH)
         root:addChild(item)
+        item.lotBtn:setText('Lot')
+        item.passBtn:setText('Pass')
         item.lotBtn.onClick  = makeLotCallback(item)
         item.passBtn.onClick = makePassCallback(item)
         table.insert(lootItems, item)
@@ -209,6 +223,20 @@ function lootWindow.update(items)
     else
         lotAllBtn:hide(utils.VIS_TOKEN)
         passAllBtn:hide(utils.VIS_TOKEN)
+    end
+
+    -- Update button hover states every frame
+    lotAllBtn:setHover(lotAllBtn.absoluteVisibility and lotAllBtn:hitTest(mouseX, mouseY))
+    passAllBtn:setHover(passAllBtn.absoluteVisibility and passAllBtn:hitTest(mouseX, mouseY))
+    for _, item in ipairs(lootItems) do
+        item.lotBtn:setHover(item.lotBtn.absoluteVisibility and item.lotBtn:hitTest(mouseX, mouseY))
+        item.passBtn:setHover(item.passBtn.absoluteVisibility and item.passBtn:hitTest(mouseX, mouseY))
+    end
+
+    -- Clear pressed state if button was hidden (e.g. item got lotted)
+    if pressedBtn and not pressedBtn.absoluteVisibility then
+        pressedBtn:setPressed(false)
+        pressedBtn = nil
     end
 
     -- Hide entire window when pool is empty
@@ -247,36 +275,44 @@ function lootWindow.handleMouse(e)
         mouseX = e.x
         mouseY = e.y
 
+        -- Block all clicks within the window — prevents click-through to game
+        if not hitTestWindow(e.x, e.y) then
+            return false
+        end
+        e.blocked = true
+
         if lootWindow.dragEnabled and hitTestHeader(e.x, e.y) then
             isDragging = true
             dragOff.x = e.x - anchor.x
             dragOff.y = e.y - anchor.y
-            e.blocked = true
             return false
         end
 
         if lotAllBtn:hitTest(e.x, e.y) and lotAllBtn.absoluteVisibility then
+            pressedBtn = lotAllBtn
+            lotAllBtn:setPressed(true)
             if lootWindow.onLotAll then lootWindow.onLotAll() end
-            e.blocked = true
             return false
         end
 
         if passAllBtn:hitTest(e.x, e.y) and passAllBtn.absoluteVisibility then
+            pressedBtn = passAllBtn
+            passAllBtn:setPressed(true)
             if lootWindow.onPassAll then lootWindow.onPassAll() end
-            e.blocked = true
             return false
         end
 
-        if hoveredIdx and lootItems[hoveredIdx] then
-            local item = lootItems[hoveredIdx]
+        for _, item in ipairs(lootItems) do
             if item.lotBtn:hitTest(e.x, e.y) and item.lotBtn.absoluteVisibility then
+                pressedBtn = item.lotBtn
+                item.lotBtn:setPressed(true)
                 if item.lotBtn.onClick then item.lotBtn.onClick() end
-                e.blocked = true
                 return false
             end
             if item.passBtn:hitTest(e.x, e.y) and item.passBtn.absoluteVisibility then
+                pressedBtn = item.passBtn
+                item.passBtn:setPressed(true)
                 if item.passBtn.onClick then item.passBtn.onClick() end
-                e.blocked = true
                 return false
             end
         end
@@ -285,10 +321,17 @@ function lootWindow.handleMouse(e)
     end
 
     if e.message == 514 then  -- left up
+        if pressedBtn then
+            pressedBtn:setPressed(false)
+            pressedBtn = nil
+        end
         if isDragging then
             isDragging = false
             e.blocked = true
             return true
+        end
+        if hitTestWindow(e.x, e.y) then
+            e.blocked = true
         end
     end
 
@@ -314,6 +357,7 @@ function lootWindow.destroy()
     lotAllBtn   = nil
     passAllBtn  = nil
     hoveredIdx  = nil
+    pressedBtn  = nil
     isDragging  = false
 end
 

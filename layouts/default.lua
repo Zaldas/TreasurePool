@@ -1,7 +1,6 @@
-local WINDOW_W    = 380
+local WINDOW_W    = 300
 local HEADER_H    = 26
-local ROW_H       = 54
-local CONTENT_H   = 50
+local ROW_H       = 37
 local FOOTER_H    = 28
 local PAD         = 8
 local BTN_GAP     = 4
@@ -9,14 +8,14 @@ local LOT_BTN_W   = 44
 local PASS_BTN_W  = 48
 local LOT_ALL_W   = 58
 local PASS_ALL_W  = 64
-local BTN_H       = 20
-local BAR_H       = 4
+local BTN_H       = 16
+local BTN_FONT    = 11
 
 local PASS_BTN_X  = WINDOW_W - PAD - PASS_BTN_W
 local LOT_BTN_X   = PASS_BTN_X - BTN_GAP - LOT_BTN_W
-local TIMER_X     = LOT_BTN_X - 8
-local BTN_Y       = math.floor((CONTENT_H - BTN_H) / 2)
-local TIMER_Y     = math.floor((CONTENT_H - 14) / 2)
+local TIMER_X     = WINDOW_W - PAD - 10
+local BTN_Y       = 4
+local TIMER_Y     = 19
 
 local layout = {
     window = {
@@ -45,29 +44,29 @@ local layout = {
     lootItem = {
         nameText = {
             font        = 'Lucida Sans Unicode',
-            size        = 16,
+            size        = 13,
             color       = '#E8E8E8FF',
             stroke      = '#000000C0',
             strokeWidth = 0,
             bold        = true,
             align       = 'left',
-            pos         = { PAD, 6 },
+            pos         = { PAD, 3 },
         },
 
         statusText = {
             font        = 'Lucida Sans Unicode',
-            size        = 13,
+            size        = 11,
             color       = '#AAAAAAFF',
             stroke      = '#000000A0',
             strokeWidth = 0,
             bold        = false,
             align       = 'left',
-            pos         = { PAD + 10, 27 },
+            pos         = { PAD + 10, 19 },
         },
 
         timerText = {
             font        = 'Lucida Sans Unicode',
-            size        = 14,
+            size        = 11,
             color       = '#6EB5FFFF',
             stroke      = '#000000A0',
             strokeWidth = 0,
@@ -82,30 +81,32 @@ local layout = {
         },
 
         timerBar = {
-            pos       = { 0, CONTENT_H },
+            pos       = { 0, 33 },
             animSpeed = 1,
             imgBg = {
                 path  = 'layouts/assets/pixel.png',
-                size  = { WINDOW_W, BAR_H },
-                color = '#FFFFFF18',
+                size  = { WINDOW_W, 2 },
+                color = '#FFFFFF08',
             },
             imgBar = {
                 path  = 'layouts/assets/pixel.png',
-                size  = { WINDOW_W, BAR_H },
-                color = '#6EB5FFFF',
+                size  = { WINDOW_W, 2 },
+                color = '#6EB5FF80',
             },
         },
 
         lotBtn = {
-            pos  = { LOT_BTN_X, BTN_Y },
-            size = { LOT_BTN_W, BTN_H },
+            pos        = { LOT_BTN_X, BTN_Y },
+            size       = { LOT_BTN_W, BTN_H },
+            path       = 'layouts/assets/rounded.png',
+            sliceBorder = 4,
             label = {
                 font        = 'Arial',
-                size        = 13,
+                size        = BTN_FONT,
                 color       = '#FFFFFFFF',
                 strokeWidth = 0,
                 align       = 'center',
-                pos         = { LOT_BTN_W / 2, math.floor((BTN_H - 13) / 2) },
+                pos         = { LOT_BTN_W / 2, math.floor((BTN_H - BTN_FONT) / 2) },
             },
             colors = {
                 normal   = 0xFF2A5F85,
@@ -116,15 +117,17 @@ local layout = {
         },
 
         passBtn = {
-            pos  = { PASS_BTN_X, BTN_Y },
-            size = { PASS_BTN_W, BTN_H },
+            pos        = { PASS_BTN_X, BTN_Y },
+            size       = { PASS_BTN_W, BTN_H },
+            path       = 'layouts/assets/rounded.png',
+            sliceBorder = 4,
             label = {
                 font        = 'Arial',
-                size        = 13,
+                size        = BTN_FONT,
                 color       = '#FFFFFFFF',
                 strokeWidth = 0,
                 align       = 'center',
-                pos         = { PASS_BTN_W / 2, math.floor((BTN_H - 13) / 2) },
+                pos         = { PASS_BTN_W / 2, math.floor((BTN_H - BTN_FONT) / 2) },
             },
             colors = {
                 normal   = 0xFF2A5F85,
@@ -133,18 +136,27 @@ local layout = {
                 disabled = 0xFF333333,
             },
         },
+
+        separator = {
+            path  = 'layouts/assets/pixel.png',
+            size  = { WINDOW_W, 1 },
+            pos   = { 0, 35 },
+            color = '#FFFFFF30',
+        },
     },
 
     footer = {
         lotAllBtn = {
-            size = { LOT_ALL_W, BTN_H },
+            size        = { LOT_ALL_W, BTN_H },
+            path        = 'layouts/assets/rounded.png',
+            sliceBorder = 4,
             label = {
                 font        = 'Arial',
-                size        = 13,
+                size        = BTN_FONT,
                 color       = '#FFFFFFFF',
                 strokeWidth = 0,
                 align       = 'center',
-                pos         = { LOT_ALL_W / 2, math.floor((BTN_H - 13) / 2) },
+                pos         = { LOT_ALL_W / 2, math.floor((BTN_H - BTN_FONT) / 2) },
             },
             colors = {
                 normal   = 0xFF2A5F85,
@@ -155,14 +167,16 @@ local layout = {
         },
 
         passAllBtn = {
-            size = { PASS_ALL_W, BTN_H },
+            size        = { PASS_ALL_W, BTN_H },
+            path        = 'layouts/assets/rounded.png',
+            sliceBorder = 4,
             label = {
                 font        = 'Arial',
-                size        = 13,
+                size        = BTN_FONT,
                 color       = '#FFFFFFFF',
                 strokeWidth = 0,
                 align       = 'center',
-                pos         = { PASS_ALL_W / 2, math.floor((BTN_H - 13) / 2) },
+                pos         = { PASS_ALL_W / 2, math.floor((BTN_H - BTN_FONT) / 2) },
             },
             colors = {
                 normal   = 0xFF2A5F85,

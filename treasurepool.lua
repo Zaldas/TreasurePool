@@ -65,7 +65,7 @@ local dTreasurePool = {
     { name = "Zenith Mitts",             lot = 65535, lotWinner = "Jorin",         winningLot = 720, dropTime = os.time() - 180 },
     { name = "Homam Corazza",            lot = 65535, lotWinner = "",              winningLot = 0,   dropTime = os.time() - 30  },
     { name = "Ridill",                   lot = 0,     lotWinner = "George",        winningLot = 997, dropTime = os.time() - 295 },
-    { name = "Joyeuse +1 Augmented Wep", lot = 0,     lotWinner = "Somewhatdamaged", winningLot = 421, dropTime = os.time() - 200 },
+    { name = "Assassin's Armlets",       lot = 0,     lotWinner = "Somewhatdamaged", winningLot = 421, dropTime = os.time() - 200 },
 }
 
 ------------------------------------------------------------
@@ -90,10 +90,17 @@ end
 ------------------------------------------------------------
 -- Gather Treasure Pool Data
 ------------------------------------------------------------
+local function getPlayerName()
+    local party = AshitaCore:GetMemoryManager():GetParty()
+    local name  = party and party:GetMemberName(0)
+    return (type(name) == 'string' and #name > 0) and name or 'You'
+end
+
 local function gatherTreasureData()
-    local result = {}
-    local inv    = AshitaCore:GetMemoryManager():GetInventory()
-    local resMgr = AshitaCore:GetResourceManager()
+    local result     = {}
+    local inv        = AshitaCore:GetMemoryManager():GetInventory()
+    local resMgr     = AshitaCore:GetResourceManager()
+    local playerName = getPlayerName()
 
     for i = 0, 9 do
         local item = inv:GetTreasurePoolItem(i)
@@ -116,6 +123,7 @@ local function gatherTreasureData()
                 winningLot = item.WinningLot,
                 winnerName = winnerName,
                 dropTime   = item.DropTime,
+                playerName = playerName,
             }
         end
     end
@@ -123,8 +131,9 @@ local function gatherTreasureData()
 end
 
 local function gatherDebugData()
-    local result = {}
-    local count  = tpSettings and tpSettings.debugCount or 10
+    local result     = {}
+    local count      = tpSettings and tpSettings.debugCount or 10
+    local playerName = getPlayerName()
     for i, item in ipairs(dTreasurePool) do
         if i > count then break end
         result[#result + 1] = {
@@ -135,6 +144,7 @@ local function gatherDebugData()
             winningLot = item.winningLot,
             winnerName = item.lotWinner,
             dropTime   = item.dropTime,
+            playerName = playerName,
         }
     end
     return result
@@ -145,18 +155,18 @@ end
 ------------------------------------------------------------
 local function wireCallbacks()
     lootWindow.onLotSlot = function(slot)
-        if not tpSettings.debug then
-            sendLotPacket(slot)
-        else
+        if tpSettings.debug then
             print('[TreasurePool] Debug: Lot slot ' .. tostring(slot))
+        else
+            sendLotPacket(slot)
         end
     end
 
     lootWindow.onPassSlot = function(slot)
-        if not tpSettings.debug then
-            sendPassPacket(slot)
-        else
+        if tpSettings.debug then
             print('[TreasurePool] Debug: Pass slot ' .. tostring(slot))
+        else
+            sendPassPacket(slot)
         end
     end
 
@@ -223,17 +233,33 @@ end)
 local function drawSettingsWindow()
     if not settingsOpen[1] then return end
 
-    imgui.SetNextWindowSize({ 260, 80 }, ImGuiCond_FirstUseEver)
+    imgui.SetNextWindowSize({ 260, 110 }, ImGuiCond_FirstUseEver)
     if imgui.Begin('TreasurePool Settings', settingsOpen) then
         local drag = { tpSettings.dragEnabled }
         if imgui.Checkbox('Drag Enabled', drag) then
-            tpSettings.dragEnabled    = drag[1]
-            lootWindow.dragEnabled    = drag[1]
+            tpSettings.dragEnabled = drag[1]
+            lootWindow.dragEnabled = drag[1]
             settings.save()
         end
         imgui.SameLine()
         if imgui.Button('Reload Layout') then
             reloadLayout()
+        end
+
+        local dbg = { tpSettings.debug }
+        if imgui.Checkbox('Debug Mode', dbg) then
+            tpSettings.debug = dbg[1]
+        end
+        if tpSettings.debug then
+            imgui.SameLine()
+            local cnt = { tpSettings.debugCount }
+            imgui.SetNextItemWidth(60)
+            if imgui.InputInt('Items', cnt) then
+                local v = cnt[1]
+                if v >= 1 and v <= 10 then
+                    tpSettings.debugCount = v
+                end
+            end
         end
     end
     imgui.End()
