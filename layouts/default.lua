@@ -1,24 +1,22 @@
-------------------------------------------------------------
--- layouts/default.lua
--- Default layout for TreasurePool (spui sprite engine)
--- All pixel values are at 1440p baseline.
--- Color strings use '#RRGGBBAA' format for spui.
--- D3DCOLOR integers (0xAARRGGBB) are stored in 'colors'
--- sub-tables for runtime use by Lua code (not passed to spui).
-------------------------------------------------------------
-
 local WINDOW_W    = 380
-local HEADER_H    = 28
-local ROW_H       = 22
-local FOOTER_H    = 26
-local PAD         = 6
+local HEADER_H    = 26
+local ROW_H       = 54
+local CONTENT_H   = 50
+local FOOTER_H    = 28
+local PAD         = 8
 local BTN_GAP     = 4
 local LOT_BTN_W   = 44
 local PASS_BTN_W  = 48
 local LOT_ALL_W   = 58
 local PASS_ALL_W  = 64
-local BTN_H       = 18   -- ROW_H - 4
-local RIGHT_X_OFF = 278
+local BTN_H       = 20
+local BAR_H       = 4
+
+local PASS_BTN_X  = WINDOW_W - PAD - PASS_BTN_W
+local LOT_BTN_X   = PASS_BTN_X - BTN_GAP - LOT_BTN_W
+local TIMER_X     = LOT_BTN_X - 8
+local BTN_Y       = math.floor((CONTENT_H - BTN_H) / 2)
+local TIMER_Y     = math.floor((CONTENT_H - 14) / 2)
 
 local layout = {
     window = {
@@ -48,23 +46,34 @@ local layout = {
         nameText = {
             font        = 'Lucida Sans Unicode',
             size        = 16,
-            color       = '#D3D3D3FF',
-            stroke      = '#B2BEB5FF',
+            color       = '#E8E8E8FF',
+            stroke      = '#000000C0',
+            strokeWidth = 0,
+            bold        = true,
+            align       = 'left',
+            pos         = { PAD, 6 },
+        },
+
+        statusText = {
+            font        = 'Lucida Sans Unicode',
+            size        = 13,
+            color       = '#AAAAAAFF',
+            stroke      = '#000000A0',
             strokeWidth = 0,
             bold        = false,
             align       = 'left',
-            pos         = { PAD, 2 },
+            pos         = { PAD + 10, 27 },
         },
 
         timerText = {
             font        = 'Lucida Sans Unicode',
-            size        = 16,
+            size        = 14,
             color       = '#6EB5FFFF',
-            stroke      = '#B2BEB5FF',
+            stroke      = '#000000A0',
             strokeWidth = 0,
             bold        = false,
             align       = 'right',
-            pos         = { PAD + 210 + 52, 2 },  -- NAME_W + TIMER_W
+            pos         = { TIMER_X, TIMER_Y },
             colors = {
                 normal   = 0xFF6EB5FF,
                 warning  = 0xFFFF8C00,
@@ -72,19 +81,23 @@ local layout = {
             },
         },
 
-        rightText = {
-            font        = 'Lucida Sans Unicode',
-            size        = 16,
-            color       = '#D3D3D3FF',
-            stroke      = '#B2BEB5FF',
-            strokeWidth = 0,
-            bold        = false,
-            align       = 'left',
-            pos         = { RIGHT_X_OFF, 2 },
+        timerBar = {
+            pos       = { 0, CONTENT_H },
+            animSpeed = 1,
+            imgBg = {
+                path  = 'layouts/assets/pixel.png',
+                size  = { WINDOW_W, BAR_H },
+                color = '#FFFFFF18',
+            },
+            imgBar = {
+                path  = 'layouts/assets/pixel.png',
+                size  = { WINDOW_W, BAR_H },
+                color = '#6EB5FFFF',
+            },
         },
 
         lotBtn = {
-            pos  = { RIGHT_X_OFF, 2 },
+            pos  = { LOT_BTN_X, BTN_Y },
             size = { LOT_BTN_W, BTN_H },
             label = {
                 font        = 'Arial',
@@ -92,7 +105,7 @@ local layout = {
                 color       = '#FFFFFFFF',
                 strokeWidth = 0,
                 align       = 'center',
-                pos         = { 22, 2 },  -- LOT_BTN_W/2, (BTN_H-13)/2
+                pos         = { LOT_BTN_W / 2, math.floor((BTN_H - 13) / 2) },
             },
             colors = {
                 normal   = 0xFF2A5F85,
@@ -103,7 +116,7 @@ local layout = {
         },
 
         passBtn = {
-            pos  = { RIGHT_X_OFF + LOT_BTN_W + BTN_GAP, 2 },
+            pos  = { PASS_BTN_X, BTN_Y },
             size = { PASS_BTN_W, BTN_H },
             label = {
                 font        = 'Arial',
@@ -111,7 +124,7 @@ local layout = {
                 color       = '#FFFFFFFF',
                 strokeWidth = 0,
                 align       = 'center',
-                pos         = { 24, 2 },  -- PASS_BTN_W/2, (BTN_H-13)/2
+                pos         = { PASS_BTN_W / 2, math.floor((BTN_H - 13) / 2) },
             },
             colors = {
                 normal   = 0xFF2A5F85,
@@ -131,7 +144,7 @@ local layout = {
                 color       = '#FFFFFFFF',
                 strokeWidth = 0,
                 align       = 'center',
-                pos         = { 29, 2 },  -- LOT_ALL_W/2, (BTN_H-13)/2
+                pos         = { LOT_ALL_W / 2, math.floor((BTN_H - 13) / 2) },
             },
             colors = {
                 normal   = 0xFF2A5F85,
@@ -149,7 +162,7 @@ local layout = {
                 color       = '#FFFFFFFF',
                 strokeWidth = 0,
                 align       = 'center',
-                pos         = { 32, 2 },  -- PASS_ALL_W/2, (BTN_H-13)/2
+                pos         = { PASS_ALL_W / 2, math.floor((BTN_H - 13) / 2) },
             },
             colors = {
                 normal   = 0xFF2A5F85,
