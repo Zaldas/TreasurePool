@@ -103,7 +103,7 @@ function lootItem:update(entry, isHovered)
 
     self.nameText:update(entry.name)
 
-    local remaining = math.max(0, (entry.dropTime + 300) - os.time())
+    local remaining = math.max(0, (entry.expiresAt or 0) - os.time())
     self.timerText:update(formatTimer(remaining))
 
     local tc = private[self].timerColors
