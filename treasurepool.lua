@@ -1,6 +1,6 @@
 addon.name      = 'TreasurePool'
 addon.author    = 'Shiyo, Zaldas'
-addon.version   = '3.0.0'
+addon.version   = '2.0.1'
 addon.desc      = 'Displays your current treasure pool with lot/pass buttons.'
 addon.link      = 'https://ashitaxi.com/'
 
@@ -64,16 +64,16 @@ end
 -- Debug test data
 ------------------------------------------------------------
 local dTreasurePool = {
-    { name = "Kraken Club",              lot = 0,     lotWinner = "",              winningLot = 0,   dropTime = os.time() - 20  },
-    { name = "Osode of Flames",          lot = 0,     lotWinner = "Matsuno",       winningLot = 543, dropTime = os.time() - 80  },
-    { name = "Perdu Blade",              lot = 0,     lotWinner = "Jorin",         winningLot = 821, dropTime = os.time() - 210 },
-    { name = "Biting Sword",             lot = 0,     lotWinner = "Beatrice",      winningLot = 412, dropTime = os.time() - 265 },
-    { name = "Byakko's Haidate",         lot = 765,   lotWinner = "You",           winningLot = 765, dropTime = os.time() - 50  },
-    { name = "Martial Anelace",          lot = 312,   lotWinner = "Matsuno",       winningLot = 543, dropTime = os.time() - 100 },
-    { name = "Zenith Mitts",             lot = 65535, lotWinner = "Jorin",         winningLot = 720, dropTime = os.time() - 180 },
-    { name = "Homam Corazza",            lot = 65535, lotWinner = "",              winningLot = 0,   dropTime = os.time() - 30  },
-    { name = "Ridill",                   lot = 0,     lotWinner = "George",        winningLot = 997, dropTime = os.time() - 295 },
-    { name = "Assassin's Armlets",       lot = 0,     lotWinner = "Somewhatdamaged", winningLot = 421, dropTime = os.time() - 200 },
+    { name = "Kraken Club",              lot = 0,     lotWinner = "",              winningLot = 0,   timeToLive = 280 },
+    { name = "Osode of Flames",          lot = 0,     lotWinner = "Matsuno",       winningLot = 543, timeToLive = 220 },
+    { name = "Perdu Blade",              lot = 0,     lotWinner = "Jorin",         winningLot = 821, timeToLive = 90  },
+    { name = "Biting Sword",             lot = 0,     lotWinner = "Beatrice",      winningLot = 412, timeToLive = 35  },
+    { name = "Byakko's Haidate",         lot = 765,   lotWinner = "You",           winningLot = 765, timeToLive = 250 },
+    { name = "Martial Anelace",          lot = 312,   lotWinner = "Matsuno",       winningLot = 543, timeToLive = 200 },
+    { name = "Zenith Mitts",             lot = 65535, lotWinner = "Jorin",         winningLot = 720, timeToLive = 120 },
+    { name = "Homam Corazza",            lot = 65535, lotWinner = "",              winningLot = 0,   timeToLive = 270 },
+    { name = "Ridill",                   lot = 0,     lotWinner = "George",        winningLot = 997, timeToLive = 5   },
+    { name = "Assassin's Armlets",       lot = 0,     lotWinner = "Somewhatdamaged", winningLot = 421, timeToLive = 100 },
 }
 
 ------------------------------------------------------------
@@ -98,6 +98,13 @@ end
 ------------------------------------------------------------
 -- Gather Treasure Pool Data
 ------------------------------------------------------------
+
+-- Maps FFXI DropTime value -> Unix expiry timestamp (os.time() + 300).
+-- DropTime is an FFXI-epoch timestamp, not Unix, so we can't do math on it
+-- directly. Instead we use it as a unique key and record when we first saw
+-- each item.
+local dropTimeCache = {}
+
 local function getPlayerName()
     local party = AshitaCore:GetMemoryManager():GetParty()
     local name  = party and party:GetMemberName(0)
@@ -109,6 +116,7 @@ local function gatherTreasureData()
     local inv        = AshitaCore:GetMemoryManager():GetInventory()
     local resMgr     = AshitaCore:GetResourceManager()
     local playerName = getPlayerName()
+    local now        = os.time()
 
     for i = 0, 9 do
         local item = inv:GetTreasurePoolItem(i)
@@ -123,6 +131,11 @@ local function gatherTreasureData()
                 winnerName = 'Unknown'
             end
 
+            -- First time we see this DropTime, record expiry as now + 300s
+            if not dropTimeCache[item.DropTime] then
+                dropTimeCache[item.DropTime] = now + 300
+            end
+
             result[#result + 1] = {
                 slot       = i,
                 itemId     = item.ItemId,
@@ -130,7 +143,7 @@ local function gatherTreasureData()
                 lot        = item.Lot,
                 winningLot = item.WinningLot,
                 winnerName = winnerName,
-                dropTime   = item.DropTime,
+                expiresAt  = dropTimeCache[item.DropTime],
                 playerName = playerName,
             }
         end
@@ -151,7 +164,7 @@ local function gatherDebugData()
             lot        = item.lot,
             winningLot = item.winningLot,
             winnerName = item.lotWinner == 'You' and playerName or item.lotWinner,
-            dropTime   = item.dropTime,
+            expiresAt  = os.time() + item.timeToLive,
             playerName = playerName,
         }
     end
