@@ -95,12 +95,7 @@ function state.handlePacketIn(e)
         local judgeFlg = packet.JudgeFlg
 
         -- Extract actor name from sLootName2
-        local actorName = ''
-        for j = 0, 23 do
-            local ch = packet.sLootName2[j]
-            if ch == 0 then break end
-            actorName = actorName .. string.char(ch)
-        end
+        local actorName = ffi.string(packet.sLootName2, 24):match('^[^%z]*')
 
         if judgeFlg == 0 then
             -- Someone lotted or passed

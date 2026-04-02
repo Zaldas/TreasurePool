@@ -49,6 +49,63 @@ local tpSettings       = nil
 local settingsOpen     = { false }
 local settingsWasOpen  = false
 local debugMode        = false  -- transient, never persisted
+local cachedItems      = {}
+
+------------------------------------------------------------
+-- Cache helpers (packet-driven insertion sort)
+------------------------------------------------------------
+local function insertSorted(item)
+    -- Remove any existing entry for this slot first (update case)
+    for i = #cachedItems, 1, -1 do
+        if cachedItems[i].slot == item.slot then
+            table.remove(cachedItems, i)
+            break
+        end
+    end
+    -- Insert at first position where our expiresAt is greater (descending)
+    for i = 1, #cachedItems do
+        if item.expiresAt > cachedItems[i].expiresAt then
+            table.insert(cachedItems, i, item)
+            return
+        end
+    end
+    cachedItems[#cachedItems + 1] = item
+end
+
+local function removeFromCache(slot)
+    for i = 1, #cachedItems do
+        if cachedItems[i].slot == slot then
+            table.remove(cachedItems, i)
+            return
+        end
+    end
+end
+
+local function buildItemFromPacket(packet)
+    local itemId   = packet.TrophyItemNo
+    local resource = AshitaCore:GetResourceManager():GetItemById(itemId)
+    local now      = os.time()
+
+    if not dropTimeCache[packet.StartTime] then
+        dropTimeCache[packet.StartTime] = now + 300
+    end
+
+    local winnerName = ffi.string(packet.LootActName, 16):match('^[^%z]*')
+    if packet.LootPoint == 0 or #winnerName < 3 then
+        winnerName = ''
+    end
+
+    return {
+        slot       = packet.TrophyItemIndex,
+        itemId     = itemId,
+        name       = (resource and resource.Name[1]) or 'Unknown',
+        lot        = packet.IsLocallyLotted,
+        winningLot = packet.LootPoint,
+        winnerName = winnerName,
+        expiresAt  = dropTimeCache[packet.StartTime],
+        playerName = getPlayerName(),
+    }
+end
 
 -- Compute getEffectiveScale() from screen resolution (1440p baseline)
 local resY = AshitaCore:GetConfigurationManager():GetFloat('boot', 'ffxi.registry', '0002', 768)
@@ -232,6 +289,10 @@ ashita.events.register('load', 'load_cb', function()
     lootWindow.dragEnabled = tpSettings.dragEnabled
     wireCallbacks()
 
+    -- Prime cache in case addon loads while items are already in the pool
+    cachedItems = gatherTreasureData()
+    table.sort(cachedItems, function(a, b) return a.expiresAt > b.expiresAt end)
+
     settings.register('settings', 'settings_update', function(s)
         if s ~= nil then
             lootWindow.destroy()
@@ -249,6 +310,7 @@ end)
 ashita.events.register('unload', 'unload_cb', function()
     lootWindow.destroy()
     state.reset()
+    cachedItems = {}
 end)
 
 ------------------------------------------------------------
@@ -301,9 +363,9 @@ local function drawSettingsWindow()
 
     local indent = 6
     imgui.PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0)
-    if imgui.Begin('TreasurePool Settings', settingsOpen, ImGuiWindowFlags_AlwaysAutoResize) then
-        local avail  = imgui.GetContentRegionAvail()
-        local availW = type(avail) == 'table' and avail[1] or avail
+    imgui.SetNextWindowSize({ 270, 0 }, ImGuiCond_Always)
+    if imgui.Begin('TreasurePool Settings', settingsOpen, ImGuiWindowFlags_NoResize) then
+        local availW = 270 - 16  -- window width minus padding
 
         -- Display section
         drawGradientHeader('Display')
@@ -382,15 +444,8 @@ ashita.events.register('d3d_present', 'present_cb', function()
     -- Drain lot/pass all queues
     state.drainQueues(sendLotPacket, sendPassPacket)
 
-    -- Gather data
-    local items
-    if debugMode then
-        items = gatherDebugData()
-    else
-        items = gatherTreasureData()
-    end
-
-    -- Update the window
+    -- Debug mode re-generates fake data each frame (responds to debugCount changes)
+    local items = debugMode and gatherDebugData() or cachedItems
     lootWindow.update(items)
 end)
 
@@ -408,6 +463,48 @@ end)
 ------------------------------------------------------------
 ashita.events.register('packet_in', 'treasurepool_packet_in', function(e)
     state.handlePacketIn(e)
+
+    if e.injected then return end
+
+    -- 0x00D2: item added/updated or removed from pool slot
+    if e.id == 0x00D2 then
+        local packet = ffi.cast('tp_packet_trophylist_s2c_t*', e.data_modified_raw)
+        if packet.TrophyItemNo == 0 then
+            removeFromCache(packet.TrophyItemIndex)
+        else
+            insertSorted(buildItemFromPacket(packet))
+        end
+        return
+    end
+
+    -- 0x00D3: lot/pass update or item awarded
+    if e.id == 0x00D3 then
+        local packet  = ffi.cast('tp_packet_trophysolution_s2c_t*', e.data_modified_raw)
+        local slotIdx = packet.TrophyItemIndex
+
+        if packet.JudgeFlg == 1 then
+            -- Item awarded — remove from pool
+            removeFromCache(slotIdx)
+        elseif packet.JudgeFlg == 0 then
+            -- Lot/pass — update existing entry in-place (no re-sort; expiresAt unchanged)
+            for _, entry in ipairs(cachedItems) do
+                if entry.slot == slotIdx then
+                    -- Update current winner
+                    local winnerName = ffi.string(packet.sLootName, 16):match('^[^%z]*')
+                    entry.winningLot = packet.LootPoint
+                    entry.winnerName = (packet.LootPoint > 0 and #winnerName >= 3) and winnerName or ''
+
+                    -- Update local lot if this action was ours
+                    local actorName = ffi.string(packet.sLootName2, 24):match('^[^%z]*')
+                    if actorName == getPlayerName() then
+                        entry.lot = (packet.EntryFlg == 0) and 65535 or packet.EntryPoint
+                    end
+                    break
+                end
+            end
+        end
+        return
+    end
 end)
 
 ------------------------------------------------------------
