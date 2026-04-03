@@ -1,4 +1,4 @@
-local W = 250
+local W = 300
 
 return {
     mode = '3slice',

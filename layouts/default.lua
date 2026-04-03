@@ -1,4 +1,4 @@
-local WINDOW_W    = 250
+local WINDOW_W    = 300
 local HEADER_H    = 26
 local ROW_H       = 37
 local FOOTER_H    = 28
@@ -18,7 +18,7 @@ local PASS_BTN_X  = WINDOW_W - PAD - PASS_BTN_W
 local LOT_BTN_X   = PASS_BTN_X - BTN_GAP - LOT_BTN_W
 local TIMER_X     = WINDOW_W - PAD - 10
 local BTN_Y       = 4
-local TIMER_Y     = 19
+local TIMER_Y     = 22
 
 local layout = {
     window = {
@@ -33,12 +33,14 @@ local layout = {
     },
 
     title = {
-        font      = 'Arial',
-        size      = 22,
+        font      = 'Penumbra Serif Std',
+        size      = 20,
         color     = '#9FC8F2FF',
         stroke    = '#0041ABFF',
-        strokeWidth = 0,
-        underline = true,
+        gradientStyle = 'topToBottom',
+        gradientColor = '#00072DFF',
+        strokeWidth = 1,
+        underline = false,
         bold      = false,
         align     = 'center',
         pos       = { WINDOW_W / 2, 2 },
@@ -46,7 +48,7 @@ local layout = {
 
     lootItem = {
         nameText = {
-            font        = 'Lucida Sans Unicode',
+            font        = 'Tahoma',
             size        = 13,
             color       = '#E8E8E8FF',
             stroke      = '#000000C0',
@@ -57,7 +59,7 @@ local layout = {
         },
 
         statusText = {
-            font        = 'Lucida Sans Unicode',
+            font        = 'Tahoma',
             size        = 11,
             color       = '#AAAAAAFF',
             stroke      = '#000000A0',
@@ -68,7 +70,7 @@ local layout = {
         },
 
         timerText = {
-            font        = 'Lucida Sans Unicode',
+            font        = 'Grammara',
             size        = 11,
             color       = '#6EB5FFFF',
             stroke      = '#000000A0',
@@ -148,7 +150,7 @@ local layout = {
         },
 
         icon = {
-            pos   = { PAD, math.floor((37 - ICON_W) / 2) },
+            pos   = { PAD - 3, math.floor((37 - ICON_W) / 2) },
             size  = { ICON_W, ICON_W },
             color = '#FFFFFFFF',
         },
