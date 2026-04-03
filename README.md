@@ -5,7 +5,7 @@ Treasure Pool Visual Update
 - Sprite Render System (/layouts/defaults.lua)
 - Performance Improvements
 
-![image](https://github.com/user-attachments/assets/34783d60-44d0-4e79-859a-e19836ce4fd0)
+<img width="319" height="668" alt="image" src="https://github.com/user-attachments/assets/8f1bf6df-f276-42cb-b950-488f2901a2c2" />
 
 Color States
 - White/Default - No Action Taken
@@ -14,8 +14,10 @@ Color States
 - Gold/Lot - Lot on Item, winning lot
 
 Commands
-- /treasurepool - bring up help
-- /treasurepool debug [#] - toggle debug visual, # optional parameter 1-10 display items in treasure pool
-- /treasurepool setx # - setx anchor point for addon
-- /treasurepool sety # - sety anchor point for addon
-  
+- /treasurepool - imgui panel
+
+Fonts:
+- Title: Penumbra Serif Std 
+- Timer: Grammara
+- Rest: Tahoma
+All fonts can be found in '/layouts/default.lua'
