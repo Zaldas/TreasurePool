@@ -188,4 +188,39 @@ local layout = {
     },
 }
 
+-- Background theme definitions
+-- mode = 'flat'   : solid color pixel fill (uses layout.window.bg.color)
+-- mode = '3slice' : top cap / stretchable mid / bottom cap textures
+-- mode = 'window' : single bg texture + optional L-shaped border pieces on top
+--
+-- Themes are auto-loaded from layouts/themes/*.lua — drop a file in to add one.
+-- Each file returns a theme definition table; the filename (minus .lua) is the theme name.
+local function loadThemes()
+    local themes = {}
+
+    local src = debug.getinfo(1, 'S').source:sub(2)
+    local layoutsDir = src:match('(.+)[/\\][^/\\]+$')
+    local themesDir  = (layoutsDir .. '\\themes'):gsub('/', '\\')
+
+    local handle = io.popen('dir /b "' .. themesDir .. '\\*.lua" 2>nul')
+    if handle then
+        for filename in handle:lines() do
+            local name = filename:match('^(.+)%.lua$')
+            if name then
+                local modPath = 'layouts/themes/' .. name
+                package.loaded[modPath] = nil
+                local ok, def = pcall(require, modPath)
+                if ok and type(def) == 'table' then
+                    themes[name] = def
+                end
+            end
+        end
+        handle:close()
+    end
+
+    return themes
+end
+
+layout.themes = loadThemes()
+
 return layout
