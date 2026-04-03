@@ -1,6 +1,6 @@
 addon.name      = 'TreasurePool'
 addon.author    = 'Shiyo, Zaldas'
-addon.version   = '2.0.1'
+addon.version   = '2.1'
 addon.desc      = 'Displays your current treasure pool with lot/pass buttons.'
 addon.link      = 'https://ashitaxi.com/'
 
