@@ -4,21 +4,27 @@
 -- and manages all lootItem instances.
 ------------------------------------------------------------
 
-local sprites     = require('libs/spui/sprites')
-local uiContainer = require('libs/spui/uiContainer')
-local uiImage     = require('libs/spui/uiImage')
-local uiText      = require('libs/spui/uiText')
-local uiButton    = require('libs/spui/uiButton')
-local lootItem    = require('elements/lootItem')
-local utils       = require('libs/spui/utils')
-local bit         = require('bit')
+local sprites      = require('libs/spui/sprites')
+local uiContainer  = require('libs/spui/uiContainer')
+local uiBackground = require('libs/spui/uiBackground')
+local uiImage      = require('libs/spui/uiImage')
+local uiText       = require('libs/spui/uiText')
+local uiButton     = require('libs/spui/uiButton')
+local lootItem     = require('elements/lootItem')
+local utils        = require('libs/spui/utils')
+local bit          = require('bit')
 
 local lootWindow = {}
 
 -- Module-level state
-local engine      = nil
-local root        = nil
-local windowBg    = nil
+local engine        = nil
+local root          = nil
+local windowBg      = nil
+local bgMode        = 'flat'    -- 'flat' | '3slice' | 'window'; set in initialize
+local borderEngine  = nil
+local windowBorders = nil       -- { tl, tr, bl, br } uiImages when bgMode='window', else nil
+local bgBorderSize  = 21
+local bgBorderOffset = 1
 local titleText   = nil
 local lotAllBtn   = nil
 local passAllBtn  = nil
@@ -62,6 +68,34 @@ local function makePassCallback(item)
     end
 end
 
+local function updateBorders(totalH)
+    if not windowBorders then return end
+    local W      = layout.window.width
+    local bSize  = bgBorderSize
+    local bOff   = bgBorderOffset
+
+    local brX    = W - (bSize - bOff)      -- x where right-side pieces start
+    local brY    = totalH - (bSize - bOff) -- y where bottom-side pieces start
+    local leftW  = brX + bOff              -- width of tl and bl pieces
+    local edgeH  = brY + bOff              -- height of tl and tr pieces
+
+    windowBorders.tl.posX = -bOff
+    windowBorders.tl.posY = -bOff
+    windowBorders.tl:size(leftW, edgeH)
+
+    windowBorders.tr.posX = brX
+    windowBorders.tr.posY = -bOff
+    windowBorders.tr:size(bSize, edgeH)
+
+    windowBorders.bl.posX = -bOff
+    windowBorders.bl.posY = brY
+    windowBorders.bl:size(leftW, bSize)
+
+    windowBorders.br.posX = brX
+    windowBorders.br.posY = brY
+    windowBorders.br:size(bSize, bSize)
+end
+
 local function relayout(count)
     local W   = layout.window.width
     local H_H = layout.window.headerH
@@ -70,7 +104,14 @@ local function relayout(count)
     local PAD = layout.window.pad
     local totalH = H_H + count * R_H + F_H
 
-    windowBg:size(W, totalH)
+    if bgMode == '3slice' then
+        windowBg:setHeight(totalH)
+    else
+        windowBg:size(W, totalH)
+    end
+    if bgMode == 'window' then
+        updateBorders(totalH)
+    end
 
     -- Title
     titleText.posX = W / 2
@@ -125,10 +166,11 @@ end
 ------------------------------------------------------------
 -- Public API
 ------------------------------------------------------------
-function lootWindow.initialize(layoutRef, anchorRef, scale)
+function lootWindow.initialize(layoutRef, bgDef, anchorRef, scale)
     layout  = layoutRef
     anchor  = anchorRef
     uiScale = scale
+    bgMode  = (bgDef and bgDef.mode) or 'flat'
     engine  = sprites.newEngine()
 
     root = uiContainer.new()
@@ -137,14 +179,47 @@ function lootWindow.initialize(layoutRef, anchorRef, scale)
     root.scaleX = uiScale
     root.scaleY = uiScale
 
-    -- Window background (full size computed during relayout)
-    windowBg = uiImage.new({
-        path  = 'layouts/assets/pixel.png',
-        size  = { layout.window.width, layout.window.headerH },
-        pos         = { 0, 0 },
-        color       = layout.window.bg.color,
-    }, engine)
+    -- Window background (full size computed during relayout; first child = renders behind content)
+    if bgMode == '3slice' then
+        windowBg = uiBackground.new(bgDef, engine)
+    elseif bgMode == 'window' then
+        windowBg = uiImage.new({
+            path  = bgDef.bgPath,
+            size  = { layout.window.width, layout.window.headerH },
+            pos   = { 0, 0 },
+            color = bgDef.color or '#FFFFFFFF',
+        }, engine)
+    else
+        windowBg = uiImage.new({
+            path  = 'layouts/assets/pixel.png',
+            size  = { layout.window.width, layout.window.headerH },
+            pos   = { 0, 0 },
+            color = layout.window.bg.color,
+        }, engine)
+    end
     root:addChild(windowBg)
+
+    -- Border pieces for 'window' mode: use a second engine created after the main one
+    -- so all border sprites render on top of main-engine content (engines render in creation order)
+    if bgMode == 'window' and bgDef.borderSet then
+        bgBorderSize   = bgDef.borderSize or 21
+        bgBorderOffset = bgDef.bgOffset   or 1
+        borderEngine = sprites.newEngine()
+
+        local base = 'layouts/assets/backgrounds/' .. bgDef.borderSet
+        local W    = layout.window.width
+        local bSz  = bgBorderSize
+        windowBorders = {
+            tl = uiImage.new({ path = base .. '-tl.png', size = { W,   1   }, pos = { 0, 0 }, color = '#FFFFFFFF' }, borderEngine),
+            tr = uiImage.new({ path = base .. '-tr.png', size = { bSz, 1   }, pos = { 0, 0 }, color = '#FFFFFFFF' }, borderEngine),
+            bl = uiImage.new({ path = base .. '-bl.png', size = { W,   bSz }, pos = { 0, 0 }, color = '#FFFFFFFF' }, borderEngine),
+            br = uiImage.new({ path = base .. '-br.png', size = { bSz, bSz }, pos = { 0, 0 }, color = '#FFFFFFFF' }, borderEngine),
+        }
+        root:addChild(windowBorders.tl)
+        root:addChild(windowBorders.tr)
+        root:addChild(windowBorders.bl)
+        root:addChild(windowBorders.br)
+    end
 
     -- Title text
     titleText = uiText.new(layout.title)
@@ -352,18 +427,23 @@ function lootWindow.destroy()
         root:dispose()
         root = nil
     end
+    if borderEngine then
+        borderEngine:destroy()
+        borderEngine = nil
+    end
     if engine then
         engine:destroy()
         engine = nil
     end
-    lastCount   = -1
-    windowBg    = nil
-    titleText   = nil
-    lotAllBtn   = nil
-    passAllBtn  = nil
-    hoveredIdx  = nil
-    pressedBtn  = nil
-    isDragging  = false
+    lastCount    = -1
+    windowBg     = nil
+    windowBorders = nil
+    titleText    = nil
+    lotAllBtn    = nil
+    passAllBtn   = nil
+    hoveredIdx   = nil
+    pressedBtn   = nil
+    isDragging   = false
 end
 
 return lootWindow

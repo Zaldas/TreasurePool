@@ -40,15 +40,39 @@ local default_settings = T{
     dragEnabled    = true,
     scale          = 0,    -- 0 = auto (resY/1440); >0 = custom multiplier (0.25-2.5)
     debugCount     = 10,
+    theme          = 'Plain',
 }
+
+local BUILTIN_THEMES = {
+    Plain=true, xiv=true, ffxi=true,
+    Window1=true, Window2=true, Window3=true, Window4=true,
+    Window5=true, Window6=true, Window7=true, Window8=true,
+}
+
+local function buildThemeList()
+    local custom, builtin = {}, {}
+    for name in pairs(layout.themes) do
+        if BUILTIN_THEMES[name] then
+            builtin[#builtin + 1] = name
+        else
+            custom[#custom + 1] = name
+        end
+    end
+    table.sort(custom)
+    table.sort(builtin)
+    local list = {}
+    for _, name in ipairs(custom)  do list[#list + 1] = name end
+    for _, name in ipairs(builtin) do list[#list + 1] = name end
+    return list
+end
+
+local THEME_LIST = buildThemeList()
 
 ------------------------------------------------------------
 -- Addon State
 ------------------------------------------------------------
 local tpSettings       = nil
 local settingsOpen     = { false }
-local settingsWasOpen  = false
-local debugMode        = false  -- transient, never persisted
 local cachedItems      = {}
 
 ------------------------------------------------------------
@@ -79,6 +103,18 @@ local function removeFromCache(slot)
             return
         end
     end
+end
+
+-- Maps FFXI DropTime value -> Unix expiry timestamp (os.time() + 300).
+-- DropTime is an FFXI-epoch timestamp, not Unix, so we can't do math on it
+-- directly. Instead we use it as a unique key and record when we first saw
+-- each item.
+local dropTimeCache = {}
+
+local function getPlayerName()
+    local party = AshitaCore:GetMemoryManager():GetParty()
+    local name  = party and party:GetMemberName(0)
+    return (type(name) == 'string' and #name > 0) and name or 'You'
 end
 
 local function buildItemFromPacket(packet)
@@ -156,18 +192,6 @@ end
 -- Gather Treasure Pool Data
 ------------------------------------------------------------
 
--- Maps FFXI DropTime value -> Unix expiry timestamp (os.time() + 300).
--- DropTime is an FFXI-epoch timestamp, not Unix, so we can't do math on it
--- directly. Instead we use it as a unique key and record when we first saw
--- each item.
-local dropTimeCache = {}
-
-local function getPlayerName()
-    local party = AshitaCore:GetMemoryManager():GetParty()
-    local name  = party and party:GetMemberName(0)
-    return (type(name) == 'string' and #name > 0) and name or 'You'
-end
-
 local function gatherTreasureData()
     local result     = {}
     local inv        = AshitaCore:GetMemoryManager():GetInventory()
@@ -233,7 +257,7 @@ end
 ------------------------------------------------------------
 local function wireCallbacks()
     lootWindow.onLotSlot = function(slot)
-        if debugMode then
+        if settingsOpen[1] then
             print('[TreasurePool] Debug: Lot slot ' .. tostring(slot))
         else
             sendLotPacket(slot)
@@ -241,7 +265,7 @@ local function wireCallbacks()
     end
 
     lootWindow.onPassSlot = function(slot)
-        if debugMode then
+        if settingsOpen[1] then
             print('[TreasurePool] Debug: Pass slot ' .. tostring(slot))
         else
             sendPassPacket(slot)
@@ -249,25 +273,29 @@ local function wireCallbacks()
     end
 
     lootWindow.onLotAll = function()
-        local items = debugMode and gatherDebugData() or gatherTreasureData()
+        local items = settingsOpen[1] and gatherDebugData() or gatherTreasureData()
         state.addLotAll(items)
-        if debugMode then
+        if settingsOpen[1] then
             print('[TreasurePool] Debug: Lot All queued')
         end
     end
 
     lootWindow.onPassAll = function()
-        local items = debugMode and gatherDebugData() or gatherTreasureData()
+        local items = settingsOpen[1] and gatherDebugData() or gatherTreasureData()
         state.addPassAll(items)
-        if debugMode then
+        if settingsOpen[1] then
             print('[TreasurePool] Debug: Pass All queued')
         end
     end
 end
 
+local function getActiveBgDef()
+    return layout.themes and (layout.themes[tpSettings.theme] or layout.themes['Plain'])
+end
+
 local function rebuildWindow()
     lootWindow.destroy()
-    lootWindow.initialize(layout, tpSettings.anchor, getEffectiveScale())
+    lootWindow.initialize(layout, getActiveBgDef(), tpSettings.anchor, getEffectiveScale())
     lootWindow.dragEnabled = tpSettings.dragEnabled
     wireCallbacks()
 end
@@ -275,6 +303,7 @@ end
 local function reloadLayout()
     package.loaded['layouts/default'] = nil
     layout = require('layouts/default')
+    THEME_LIST = buildThemeList()
     rebuildWindow()
     print('[TreasurePool] Layout reloaded.')
 end
@@ -285,7 +314,7 @@ end
 ashita.events.register('load', 'load_cb', function()
     tpSettings = settings.load(default_settings)
 
-    lootWindow.initialize(layout, tpSettings.anchor, getEffectiveScale())
+    lootWindow.initialize(layout, getActiveBgDef(), tpSettings.anchor, getEffectiveScale())
     lootWindow.dragEnabled = tpSettings.dragEnabled
     wireCallbacks()
 
@@ -297,7 +326,7 @@ ashita.events.register('load', 'load_cb', function()
         if s ~= nil then
             lootWindow.destroy()
             tpSettings = s
-            lootWindow.initialize(layout, tpSettings.anchor, getEffectiveScale())
+            lootWindow.initialize(layout, getActiveBgDef(), tpSettings.anchor, getEffectiveScale())
             lootWindow.dragEnabled = tpSettings.dragEnabled
             wireCallbacks()
         end
@@ -353,12 +382,6 @@ end
 -- Settings Window (ImGui)
 ------------------------------------------------------------
 local function drawSettingsWindow()
-    -- Reset debug when the window is closed
-    if settingsWasOpen and not settingsOpen[1] then
-        debugMode = false
-    end
-    settingsWasOpen = settingsOpen[1]
-
     if not settingsOpen[1] then return end
 
     local indent = 6
@@ -369,6 +392,19 @@ local function drawSettingsWindow()
 
         -- Display section
         drawGradientHeader('Display')
+
+        imgui.SetCursorPosX(imgui.GetCursorPosX() + indent)
+        local themeIdx = { 0 }
+        for i, t in ipairs(THEME_LIST) do
+            if t == (tpSettings.theme or 'Plain') then themeIdx[1] = i - 1; break end
+        end
+        imgui.SetNextItemWidth(availW - indent)
+        if imgui.Combo('Theme##theme', themeIdx, table.concat(THEME_LIST, '\0') .. '\0') then
+            tpSettings.theme = THEME_LIST[themeIdx[1] + 1]
+            settings.save()
+            rebuildWindow()
+        end
+        imgui.Spacing()
 
         imgui.SetCursorPosX(imgui.GetCursorPosX() + indent)
         local drag = { tpSettings.dragEnabled }
@@ -398,23 +434,16 @@ local function drawSettingsWindow()
 
         imgui.Spacing()
 
-        -- Debug section
+        -- Debug section (active while settings window is open)
         drawGradientHeader('Debug')
 
         imgui.SetCursorPosX(imgui.GetCursorPosX() + indent)
-        local dbg = { debugMode }
-        if imgui.Checkbox('Debug Mode', dbg) then
-            debugMode = dbg[1]
-        end
-        if debugMode then
-            imgui.SameLine()
-            local cnt = { tpSettings.debugCount }
-            imgui.SetNextItemWidth(80)
-            if imgui.InputInt('Items##dbg', cnt) then
-                local v = cnt[1]
-                if v >= 1 and v <= 10 then
-                    tpSettings.debugCount = v
-                end
+        local cnt = { tpSettings.debugCount }
+        imgui.SetNextItemWidth(80)
+        if imgui.InputInt('Items##dbg', cnt) then
+            local v = cnt[1]
+            if v >= 1 and v <= 10 then
+                tpSettings.debugCount = v
             end
         end
 
@@ -436,7 +465,7 @@ end
 ashita.events.register('d3d_present', 'present_cb', function()
     drawSettingsWindow()
 
-    if not settings.logged_in and not debugMode then
+    if not settings.logged_in and not settingsOpen[1] then
         lootWindow.update({})
         return
     end
@@ -445,7 +474,7 @@ ashita.events.register('d3d_present', 'present_cb', function()
     state.drainQueues(sendLotPacket, sendPassPacket)
 
     -- Debug mode re-generates fake data each frame (responds to debugCount changes)
-    local items = debugMode and gatherDebugData() or cachedItems
+    local items = settingsOpen[1] and gatherDebugData() or cachedItems
     lootWindow.update(items)
 end)
 
