@@ -2,7 +2,8 @@ All credit to Shiyo for putting together framework (https://github.com/ShiyoKozu
 
 Treasure Pool Visual Update
 - Swap to GDIFonts Libray (https://github.com/ThornyFFXI/gdifonts)
-- All values configurable in settings file
+- Sprite Render System (/layouts/defaults.lua)
+- Performance Improvements
 
 ![image](https://github.com/user-attachments/assets/34783d60-44d0-4e79-859a-e19836ce4fd0)
 
