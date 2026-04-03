@@ -43,6 +43,7 @@ function lootItem:init(engine, layout)
         rowWidth       = 0,
         rowHeight      = 0,
         currentSlot    = nil,
+        engine         = engine,
     }
 
     self.timerBar = uiBar.new(layout.timerBar, engine, 1.0)
@@ -65,6 +66,9 @@ function lootItem:init(engine, layout)
 
     self.separator = uiImage.new(layout.separator, engine)
     self:addChild(self.separator)
+
+    self.iconImg = uiImage.new(layout.icon, engine)
+    self:addChild(self.iconImg)
 end
 
 function lootItem:setPosition(x, y)
@@ -102,6 +106,15 @@ function lootItem:update(entry, isHovered)
     if entry == nil then return end
 
     self.nameText:update(entry.name)
+
+    -- Icon: load from item bitmap in client memory
+    if entry.itemId and entry.itemId > 0 then
+        local item = AshitaCore:GetResourceManager():GetItemById(entry.itemId)
+        if item and item.ImageSize and item.ImageSize > 0 then
+            local tex, w, h = private[self].engine:loadImageFromMemory(item.Bitmap, item.ImageSize, entry.itemId)
+            self.iconImg:setTexture(tex, w, h)
+        end
+    end
 
     local remaining = math.max(0, (entry.expiresAt or 0) - os.time())
     self.timerText:update(formatTimer(remaining))

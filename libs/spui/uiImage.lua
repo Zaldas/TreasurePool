@@ -293,4 +293,14 @@ function uiImage:opacity(o)
     end
 end
 
+-- sets the texture directly from a pre-loaded D3D texture object.
+-- Use this for textures loaded from memory (e.g. item icons from client data).
+-- tex: IDirect3DTexture8* cdata, nativeW/nativeH: natural pixel dimensions of the texture.
+function uiImage:setTexture(tex, nativeW, nativeH)
+    if not self.isEnabled or not self.isCreated or not self.spr then return end
+    self.spr.texture = tex
+    self.spr.nativeW = nativeW or 0
+    self.spr.nativeH = nativeH or 0
+end
+
 return uiImage
