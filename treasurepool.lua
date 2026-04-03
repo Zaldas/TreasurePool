@@ -1,6 +1,6 @@
 addon.name      = 'TreasurePool'
 addon.author    = 'Shiyo, Zaldas'
-addon.version   = '2.1'
+addon.version   = '2.2'
 addon.desc      = 'Displays your current treasure pool with lot/pass buttons.'
 addon.link      = 'https://ashitaxi.com/'
 
@@ -526,7 +526,7 @@ ashita.events.register('packet_in', 'treasurepool_packet_in', function(e)
                     -- Update local lot if this action was ours
                     local actorName = ffi.string(packet.sLootName2, 24):match('^[^%z]*')
                     if actorName == getPlayerName() then
-                        entry.lot = (packet.EntryFlg == 0) and 65535 or packet.EntryPoint
+                        entry.lot = (packet.EntryPoint < 0) and 65535 or packet.EntryPoint
                     end
                     break
                 end

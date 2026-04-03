@@ -103,7 +103,7 @@ function state.handlePacketIn(e)
                 memberLots[slotIdx] = {}
             end
             if actorName ~= '' then
-                if packet.EntryFlg == 0 then
+                if packet.EntryPoint < 0 then
                     memberLots[slotIdx][actorName] = { lot = nil, passed = true }
                 else
                     memberLots[slotIdx][actorName] = { lot = packet.EntryPoint, passed = false }
