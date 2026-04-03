@@ -3,6 +3,9 @@ local HEADER_H    = 26
 local ROW_H       = 37
 local FOOTER_H    = 28
 local PAD         = 8
+local ICON_W      = 24
+local ICON_GAP    = 4
+local TEXT_X      = PAD + ICON_W + ICON_GAP
 local BTN_GAP     = 4
 local LOT_BTN_W   = 44
 local PASS_BTN_W  = 48
@@ -50,7 +53,7 @@ local layout = {
             strokeWidth = 0,
             bold        = true,
             align       = 'left',
-            pos         = { PAD, 3 },
+            pos         = { TEXT_X, 3 },
         },
 
         statusText = {
@@ -61,7 +64,7 @@ local layout = {
             strokeWidth = 0,
             bold        = false,
             align       = 'left',
-            pos         = { PAD + 10, 19 },
+            pos         = { TEXT_X, 19 },
         },
 
         timerText = {
@@ -142,6 +145,12 @@ local layout = {
             size  = { WINDOW_W, 1 },
             pos   = { 0, 35 },
             color = '#FFFFFF30',
+        },
+
+        icon = {
+            pos   = { PAD, math.floor((37 - ICON_W) / 2) },
+            size  = { ICON_W, ICON_W },
+            color = '#FFFFFFFF',
         },
     },
 

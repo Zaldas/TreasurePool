@@ -157,16 +157,16 @@ end
 -- Debug test data
 ------------------------------------------------------------
 local dTreasurePool = {
-    { name = "Kraken Club",              lot = 0,     lotWinner = "",              winningLot = 0,   timeToLive = 280 },
-    { name = "Osode of Flames",          lot = 0,     lotWinner = "Matsuno",       winningLot = 543, timeToLive = 220 },
-    { name = "Perdu Blade",              lot = 0,     lotWinner = "Jorin",         winningLot = 821, timeToLive = 90  },
-    { name = "Biting Sword",             lot = 0,     lotWinner = "Beatrice",      winningLot = 412, timeToLive = 35  },
-    { name = "Byakko's Haidate",         lot = 765,   lotWinner = "You",           winningLot = 765, timeToLive = 250 },
-    { name = "Martial Anelace",          lot = 312,   lotWinner = "Matsuno",       winningLot = 543, timeToLive = 200 },
-    { name = "Zenith Mitts",             lot = 65535, lotWinner = "Jorin",         winningLot = 720, timeToLive = 120 },
-    { name = "Homam Corazza",            lot = 65535, lotWinner = "",              winningLot = 0,   timeToLive = 270 },
-    { name = "Ridill",                   lot = 0,     lotWinner = "George",        winningLot = 997, timeToLive = 5   },
-    { name = "Assassin's Armlets",       lot = 0,     lotWinner = "Somewhatdamaged", winningLot = 421, timeToLive = 100 },
+    { itemId = 17440, name = "Kraken Club",        lot = 0,     lotWinner = "",               winningLot = 0,   timeToLive = 280 },
+    { itemId = 12562, name = "Osode of Flames",    lot = 0,     lotWinner = "Matsuno",        winningLot = 543, timeToLive = 220 },
+    { itemId = 18425, name = "Perdu Blade",        lot = 0,     lotWinner = "Jorin",          winningLot = 821, timeToLive = 90  },
+    { itemId = 17707, name = "Biting Sword",       lot = 0,     lotWinner = "Beatrice",       winningLot = 412, timeToLive = 35  },
+    { itemId = 12818, name = "Byakko's Haidate",   lot = 765,   lotWinner = "You",            winningLot = 765, timeToLive = 250 },
+    { itemId = 17707, name = "Martial Anelace",    lot = 312,   lotWinner = "Matsuno",        winningLot = 543, timeToLive = 200 },
+    { itemId = 14006, name = "Zenith Mitts",       lot = 65535, lotWinner = "Jorin",          winningLot = 720, timeToLive = 120 },
+    { itemId = 14488, name = "Homam Corazza",      lot = 65535, lotWinner = "",               winningLot = 0,   timeToLive = 270 },
+    { itemId = 16555, name = "Ridill",             lot = 0,     lotWinner = "George",         winningLot = 997, timeToLive = 5   },
+    { itemId = 15107, name = "Assassin's Armlets", lot = 0,     lotWinner = "Somewhatdamaged", winningLot = 421, timeToLive = 100 },
 }
 
 ------------------------------------------------------------
@@ -240,7 +240,7 @@ local function gatherDebugData()
         if i > count then break end
         result[#result + 1] = {
             slot       = i - 1,
-            itemId     = 0,
+            itemId     = item.itemId or 0,
             name       = item.name,
             lot        = item.lot,
             winningLot = item.winningLot,

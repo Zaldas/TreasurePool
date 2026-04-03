@@ -15,11 +15,24 @@ local d3dDevice = d3d8.get_device()
 local d3dSprite = nil          -- single D3DXSprite shared across all engines
 local imageCache = {}          -- path -> {texture, width, height}; shared (textures are immutable)
 local engines = {}             -- ordered list of all engine instances (controls cross-system z-order)
+local iconCache = {}           -- cacheKey (itemId) -> {texture, width, height}; keyed by integer item ID
 
 -- Pre-allocated FFI structs for 9-slice rendering (reused each frame; single-threaded safe)
 local nsRect     = ffi.new('RECT[9]')
 local nsVecPos   = ffi.new('D3DXVECTOR2[9]')
 local nsVecScale = ffi.new('D3DXVECTOR2[9]')
+
+pcall(ffi.cdef, [[
+    long D3DXCreateTextureFromFileInMemoryEx(
+        IDirect3DDevice8* pDevice,
+        const void* pSrcData, unsigned int SrcDataSize,
+        unsigned int Width, unsigned int Height, unsigned int MipLevels,
+        unsigned long Usage, int Format, int Pool,
+        unsigned long Filter, unsigned long MipFilter, unsigned long ColorKey,
+        D3DXIMAGE_INFO* pSrcInfo, void* pPalette,
+        IDirect3DTexture8** ppTexture
+    );
+]])
 
 local function createD3DSprite()
     local ptr = ffi.new('ID3DXSprite*[1]')
@@ -188,6 +201,41 @@ function M.newEngine()
         return tex, w, h
     end
 
+    -- Loads a texture from raw memory (item bitmap data). Caches by cacheKey (itemId integer).
+    -- data: raw bitmap bytes (IItem::Bitmap), dataSize: IItem::ImageSize, cacheKey: integer item ID
+    -- Returns texture, nativeW, nativeH (or nil, 0, 0 on failure).
+    function engine:loadImageFromMemory(data, dataSize, cacheKey)
+        if iconCache[cacheKey] then
+            local c = iconCache[cacheKey]
+            return c[1], c[2], c[3]
+        end
+
+        if not data or not dataSize or dataSize == 0 then
+            return nil, 0, 0
+        end
+
+        local texPtr  = ffi.new('IDirect3DTexture8*[1]')
+        local imgInfo = ffi.new('D3DXIMAGE_INFO')
+
+        local hr = ffi.C.D3DXCreateTextureFromFileInMemoryEx(
+            d3dDevice, data, dataSize,
+            0xFFFFFFFF, 0xFFFFFFFF, 1, 0,
+            ffi.C.D3DFMT_A8R8G8B8, ffi.C.D3DPOOL_MANAGED,
+            ffi.C.D3DX_DEFAULT, ffi.C.D3DX_DEFAULT,
+            0xFF000000, imgInfo, nil, texPtr)
+
+        if hr == ffi.C.S_OK then
+            local tex = d3d8.gc_safe_release(ffi.cast('IDirect3DTexture8*', texPtr[0]))
+            iconCache[cacheKey] = { tex, imgInfo.Width, imgInfo.Height }
+            if d3dSprite == nil then
+                d3dSprite = createD3DSprite()
+            end
+            return tex, imgInfo.Width, imgInfo.Height
+        end
+
+        return nil, 0, 0
+    end
+
     -- Sets color on a sprite from hex string '#RRGGBBAA' (layout format: red first, alpha last)
     function engine:setColor(spr, hexStr)
         if not hexStr then
@@ -222,9 +270,10 @@ function M.newEngine()
     return engine
 end
 
--- Clears the image cache (call on addon reload if textures change).
+-- Clears the image and icon caches (call on addon reload if textures change).
 function M.clearCache()
     imageCache = {}
+    iconCache  = {}
 end
 
 return M
