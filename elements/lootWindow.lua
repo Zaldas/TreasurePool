@@ -181,7 +181,15 @@ function lootWindow.initialize(layoutRef, bgDef, anchorRef, scale)
 
     -- Window background (full size computed during relayout; first child = renders behind content)
     if bgMode == '3slice' then
-        windowBg = uiBackground.new(bgDef, engine)
+        -- Inherit width from layout.window.width; theme files leave size[1] = 0 as a placeholder
+        local W  = layout.window.width
+        local bg = {
+            mode      = bgDef.mode,
+            imgTop    = { path = bgDef.imgTop.path,    size = { W, bgDef.imgTop.size[2] },    pos = bgDef.imgTop.pos,    color = bgDef.imgTop.color,    sliceBorder = bgDef.imgTop.sliceBorder },
+            imgMid    = { path = bgDef.imgMid.path,    size = { W, bgDef.imgMid.size[2] },    pos = bgDef.imgMid.pos,    color = bgDef.imgMid.color },
+            imgBottom = { path = bgDef.imgBottom.path, size = { W, bgDef.imgBottom.size[2] }, pos = bgDef.imgBottom.pos, color = bgDef.imgBottom.color, sliceBorder = bgDef.imgBottom.sliceBorder },
+        }
+        windowBg = uiBackground.new(bg, engine)
     elseif bgMode == 'window' then
         windowBg = uiImage.new({
             path  = bgDef.bgPath,
