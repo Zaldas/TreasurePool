@@ -6,12 +6,13 @@ local PAD         = 8
 local ICON_W      = 24
 local ICON_GAP    = 4
 local TEXT_X      = PAD + ICON_W + ICON_GAP
+local OFFSET_Y    = 1
 local BTN_GAP     = 4
 local LOT_BTN_W   = 44
 local PASS_BTN_W  = 48
 local LOT_ALL_W   = 58
 local PASS_ALL_W  = 64
-local BTN_H       = 16
+local BTN_H       = 18
 local BTN_FONT    = 11
 
 local PASS_BTN_X  = WINDOW_W - PAD - PASS_BTN_W
@@ -112,13 +113,13 @@ local layout = {
                 color       = '#FFFFFFFF',
                 strokeWidth = 0,
                 align       = 'center',
-                pos         = { LOT_BTN_W / 2, math.floor((BTN_H - BTN_FONT) / 2) },
+                pos         = { LOT_BTN_W / 2, math.floor((BTN_H - BTN_FONT) / 2) - OFFSET_Y },
             },
             colors = {
-                normal   = 0xFF2A5F85,
-                hover    = 0xFF3A7FAA,
-                pressed  = 0xFF1A4060,
-                disabled = 0xFF333333,
+                normal   = 0xFF60DAFF,
+                hover    = 0xFFAAFFFF,
+                pressed  = 0xFF3C93DC,
+                disabled = 0xFF757575,
             },
         },
 
@@ -134,13 +135,13 @@ local layout = {
                 color       = '#FFFFFFFF',
                 strokeWidth = 0,
                 align       = 'center',
-                pos         = { PASS_BTN_W / 2, math.floor((BTN_H - BTN_FONT) / 2) },
+                pos         = { PASS_BTN_W / 2, math.floor((BTN_H - BTN_FONT) / 2) - OFFSET_Y },
             },
             colors = {
-                normal   = 0xFF2A5F85,
-                hover    = 0xFF3A7FAA,
-                pressed  = 0xFF1A4060,
-                disabled = 0xFF333333,
+                normal   = 0xFF60DAFF,
+                hover    = 0xFFAAFFFF,
+                pressed  = 0xFF3C93DC,
+                disabled = 0xFF757575,
             },
         },
 
@@ -170,13 +171,13 @@ local layout = {
                 bold        = true,
                 strokeWidth = 0,
                 align       = 'center',
-                pos         = { LOT_ALL_W / 2, math.floor((BTN_H - BTN_FONT) / 2) },
+                pos         = { LOT_ALL_W / 2, math.floor((BTN_H - BTN_FONT) / 2) - OFFSET_Y },
             },
             colors = {
-                normal   = 0xFF2A5F85,
-                hover    = 0xFF3A7FAA,
-                pressed  = 0xFF1A4060,
-                disabled = 0xFF333333,
+                normal   = 0xFF60DAFF,
+                hover    = 0xFFAAFFFF,
+                pressed  = 0xFF3C93DC,
+                disabled = 0xFF757575,
             },
         },
 
@@ -191,13 +192,13 @@ local layout = {
                 bold        = true,
                 strokeWidth = 0,
                 align       = 'center',
-                pos         = { PASS_ALL_W / 2, math.floor((BTN_H - BTN_FONT) / 2) },
+                pos         = { PASS_ALL_W / 2, math.floor((BTN_H - BTN_FONT) / 2) - OFFSET_Y },
             },
             colors = {
-                normal   = 0xFF2A5F85,
-                hover    = 0xFF3A7FAA,
-                pressed  = 0xFF1A4060,
-                disabled = 0xFF333333,
+                normal   = 0xFF60DAFF,
+                hover    = 0xFFAAFFFF,
+                pressed  = 0xFF3C93DC,
+                disabled = 0xFF757575,
             },
         },
     },
