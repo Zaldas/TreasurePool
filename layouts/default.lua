@@ -50,7 +50,7 @@ local layout = {
     lootItem = {
         nameText = {
             font        = 'Tahoma',
-            size        = 13,
+            size        = 14,
             color       = '#E8E8E8FF',
             stroke      = '#000000C0',
             strokeWidth = 0,
@@ -65,7 +65,7 @@ local layout = {
             color       = '#AAAAAAFF',
             stroke      = '#000000A0',
             strokeWidth = 0,
-            bold        = false,
+            bold        = true,
             align       = 'left',
             pos         = { TEXT_X, 19 },
         },
