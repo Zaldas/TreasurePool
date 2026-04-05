@@ -20,4 +20,4 @@ Fonts:
 - Title: Penumbra Serif Std  
 - Timer: Grammara  
 - Rest: Tahoma  
-All fonts can be found in '/layouts/default.lua'
+All fonts can be found in downloads of Release. Install before starting client.
