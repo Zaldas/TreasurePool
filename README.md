@@ -1,12 +1,13 @@
 All credit to Shiyo for putting together framework (https://github.com/ShiyoKozuki/TreasurePool)
 
-Treasure Pool Visual Update
-- Swap to GDIFonts Libray (https://github.com/ThornyFFXI/gdifonts)
-- Sprite Render System (/layouts/defaults.lua)
+Treasure Pool Visual Update  
+- Swap to GDIFonts Libray (https://github.com/ThornyFFXI/gdifonts)  
+- Sprite Render System (/layouts/defaults.lua)  
 - Performance Improvements
-
-<img width="319" height="668" alt="image" src="https://github.com/user-attachments/assets/8f1bf6df-f276-42cb-b950-488f2901a2c2" />
-
+- Mouse interaction support  
+  
+<img width="330" height="698" alt="image" src="https://github.com/user-attachments/assets/6bee7197-d379-4d89-9b2a-126b68f7eca7" />  
+  
 Color States
 - White/Default - No Action Taken
 - Blue/Pass - Pass On Item
