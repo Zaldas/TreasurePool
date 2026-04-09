@@ -9,6 +9,7 @@ local imgui      = require('imgui')
 local settings   = require('settings')
 local ffi        = require('ffi')
 local bit        = require('bit')
+local chat       = require('chat')
 
 local lootWindow = require('elements/lootWindow')
 local state      = require('state')
@@ -258,7 +259,7 @@ end
 local function wireCallbacks()
     lootWindow.onLotSlot = function(slot)
         if settingsOpen[1] then
-            print('[TreasurePool] Debug: Lot slot ' .. tostring(slot))
+            print(chat.header('TreasurePool') .. chat.message('Debug: Lot slot ' .. tostring(slot)))
         else
             sendLotPacket(slot)
         end
@@ -266,7 +267,7 @@ local function wireCallbacks()
 
     lootWindow.onPassSlot = function(slot)
         if settingsOpen[1] then
-            print('[TreasurePool] Debug: Pass slot ' .. tostring(slot))
+            print(chat.header('TreasurePool') .. chat.message('Debug: Pass slot ' .. tostring(slot)))
         else
             sendPassPacket(slot)
         end
@@ -276,7 +277,7 @@ local function wireCallbacks()
         local items = settingsOpen[1] and gatherDebugData() or gatherTreasureData()
         state.addLotAll(items)
         if settingsOpen[1] then
-            print('[TreasurePool] Debug: Lot All queued')
+            print(chat.header('TreasurePool') .. chat.message('Debug: Lot All queued'))
         end
     end
 
@@ -284,7 +285,7 @@ local function wireCallbacks()
         local items = settingsOpen[1] and gatherDebugData() or gatherTreasureData()
         state.addPassAll(items)
         if settingsOpen[1] then
-            print('[TreasurePool] Debug: Pass All queued')
+            print(chat.header('TreasurePool') .. chat.message('Debug: Pass All queued'))
         end
     end
 end
@@ -305,7 +306,7 @@ local function reloadLayout()
     layout = require('layouts/default')
     THEME_LIST = buildThemeList()
     rebuildWindow()
-    print('[TreasurePool] Layout reloaded.')
+    print(chat.header('TreasurePool') .. chat.message('Layout reloaded.'))
 end
 
 ------------------------------------------------------------
@@ -473,6 +474,14 @@ ashita.events.register('d3d_present', 'present_cb', function()
     -- Drain lot/pass all queues
     state.drainQueues(sendLotPacket, sendPassPacket)
 
+    -- Prune items that expired >30s ago (safety net for missed clear packets)
+    local now = os.time()
+    for i = #cachedItems, 1, -1 do
+        if cachedItems[i].expiresAt < now - 30 then
+            table.remove(cachedItems, i)
+        end
+    end
+
     -- Debug mode re-generates fake data each frame (responds to debugCount changes)
     local items = settingsOpen[1] and gatherDebugData() or cachedItems
     lootWindow.update(items)
@@ -511,8 +520,8 @@ ashita.events.register('packet_in', 'treasurepool_packet_in', function(e)
         local packet  = ffi.cast('tp_packet_trophysolution_s2c_t*', e.data_modified_raw)
         local slotIdx = packet.TrophyItemIndex
 
-        if packet.JudgeFlg == 1 then
-            -- Item awarded — remove from pool
+        if packet.JudgeFlg == 1 or packet.JudgeFlg == 2 then
+            -- Item awarded (1) or failed/lost — rare/ex conflict, inventory full (2) — remove from pool
             removeFromCache(slotIdx)
         elseif packet.JudgeFlg == 0 then
             -- Lot/pass — update existing entry in-place (no re-sort; expiresAt unchanged)
