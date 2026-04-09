@@ -5,8 +5,9 @@
 -- server-to-client packets, plus lot/pass queue draining.
 ------------------------------------------------------------
 
-local ffi = require('ffi')
-local bit = require('bit')
+local ffi  = require('ffi')
+local bit  = require('bit')
+local chat = require('chat')
 
 local state = {}
 
@@ -120,7 +121,7 @@ function state.handlePacketIn(e)
                     itemName = resource.Name[1] or 'item'
                 end
             end
-            print('[TreasurePool] Cannot obtain ' .. itemName .. ' - inventory full.')
+            print(chat.header('TreasurePool') .. chat.warning('Cannot obtain ' .. itemName .. ' - item lost.'))
         end
         return
     end
