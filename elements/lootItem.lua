@@ -154,6 +154,8 @@ function lootItem:update(entry, isHovered)
     else
         if entry.winningLot > 0 and entry.winnerName ~= '' then
             statusStr = formatLot(entry.winningLot) .. ': ' .. entry.winnerName
+        elseif entry.lot == 65535 then
+            statusStr = 'Passed'
         end
     end
     self.statusText:update(statusStr)
