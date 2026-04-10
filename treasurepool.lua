@@ -42,6 +42,13 @@ local default_settings = T{
     scale          = 0,    -- 0 = auto (resY/1440); >0 = custom multiplier (0.25-2.5)
     debugCount     = 10,
     theme          = 'Plain',
+    tooltip = {
+        enabled  = true,
+        gear     = true,   -- Weapon (4), Armor (5)
+        usables  = true,   -- UsableItem (7)
+        items    = true,   -- Item (1), Crystal (8), misc catch-all
+        keyItems = false,  -- QuestItem (2) — rare in pool
+    },
 }
 
 local BUILTIN_THEMES = {
@@ -158,6 +165,7 @@ end
 -- Debug test data
 ------------------------------------------------------------
 local dTreasurePool = {
+    -- Gear (Weapon/Armor — type 4/5)
     { itemId = 17440, name = "Kraken Club",        lot = 0,     lotWinner = "",               winningLot = 0,   timeToLive = 280 },
     { itemId = 12562, name = "Osode of Flames",    lot = 0,     lotWinner = "Matsuno",        winningLot = 543, timeToLive = 220 },
     { itemId = 18425, name = "Perdu Blade",        lot = 0,     lotWinner = "Jorin",          winningLot = 821, timeToLive = 90  },
@@ -166,8 +174,12 @@ local dTreasurePool = {
     { itemId = 17707, name = "Martial Anelace",    lot = 312,   lotWinner = "Matsuno",        winningLot = 543, timeToLive = 200 },
     { itemId = 14006, name = "Zenith Mitts",       lot = 65535, lotWinner = "Jorin",          winningLot = 720, timeToLive = 120 },
     { itemId = 14488, name = "Homam Corazza",      lot = 65535, lotWinner = "",               winningLot = 0,   timeToLive = 270 },
-    { itemId = 16555, name = "Ridill",             lot = 0,     lotWinner = "George",         winningLot = 997, timeToLive = 5   },
-    { itemId = 15107, name = "Assassin's Armlets", lot = 0,     lotWinner = "Somewhatdamaged", winningLot = 421, timeToLive = 100 },
+    -- Usables (type 7) — Miratete's Memoirs
+    { itemId = 4247,  name = "Miratete's Memoirs", lot = 0,     lotWinner = "",               winningLot = 0,   timeToLive = 200 },
+    -- Items catch-all (type 1) — Kindred's Seal
+    { itemId = 1127,  name = "Kindred's Seal",     lot = 0,     lotWinner = "",               winningLot = 0,   timeToLive = 180 },
+    -- Key Item (type 2) — tooltip will be empty since KI data is not in the regular item DATs
+    { itemId = 606,   name = "Limit Breaker",      lot = 0,     lotWinner = "",               winningLot = 0,   timeToLive = 150 },
 }
 
 ------------------------------------------------------------
@@ -391,73 +403,185 @@ local function drawSettingsWindow()
     if imgui.Begin('TreasurePool Settings', settingsOpen, ImGuiWindowFlags_NoResize) then
         local availW = 270 - 16  -- window width minus padding
 
-        -- Display section
-        drawGradientHeader('Display')
+        if imgui.BeginTabBar('tpSettingsTabs') then
 
-        imgui.SetCursorPosX(imgui.GetCursorPosX() + indent)
-        local themeIdx = { 0 }
-        for i, t in ipairs(THEME_LIST) do
-            if t == (tpSettings.theme or 'Plain') then themeIdx[1] = i - 1; break end
-        end
-        imgui.SetNextItemWidth(availW - indent)
-        if imgui.Combo('Theme##theme', themeIdx, table.concat(THEME_LIST, '\0') .. '\0') then
-            tpSettings.theme = THEME_LIST[themeIdx[1] + 1]
-            settings.save()
-            rebuildWindow()
-        end
-        imgui.Spacing()
+            ----------------------------------------------------
+            -- Tab: Display
+            ----------------------------------------------------
+            if imgui.BeginTabItem('Display') then
+                imgui.Spacing()
+                drawGradientHeader('Display')
 
-        imgui.SetCursorPosX(imgui.GetCursorPosX() + indent)
-        local drag = { tpSettings.dragEnabled }
-        if imgui.Checkbox('Drag Enabled', drag) then
-            tpSettings.dragEnabled = drag[1]
-            lootWindow.dragEnabled = drag[1]
-            settings.save()
-        end
+                imgui.SetCursorPosX(imgui.GetCursorPosX() + indent)
+                local themeIdx = { 0 }
+                for i, t in ipairs(THEME_LIST) do
+                    if t == (tpSettings.theme or 'Plain') then themeIdx[1] = i - 1; break end
+                end
+                imgui.SetNextItemWidth(availW - indent)
+                if imgui.Combo('Theme##theme', themeIdx, table.concat(THEME_LIST, '\0') .. '\0') then
+                    tpSettings.theme = THEME_LIST[themeIdx[1] + 1]
+                    settings.save()
+                    rebuildWindow()
+                end
+                imgui.Spacing()
 
-        imgui.SetCursorPosX(imgui.GetCursorPosX() + indent)
-        local customScaleOn = { (tpSettings.scale or 0) > 0 }
-        if imgui.Checkbox('Custom Scale', customScaleOn) then
-            tpSettings.scale = customScaleOn[1] and 1.0 or 0
-            settings.save()
-            rebuildWindow()
-        end
-        if customScaleOn[1] then
-            imgui.SameLine()
-            local scaleVal = { tpSettings.scale > 0 and tpSettings.scale or 1.0 }
-            imgui.SetNextItemWidth(120)
-            if imgui.SliderFloat('##scale', scaleVal, 0.25, 2.5, 'x%.2f') then
-                tpSettings.scale = scaleVal[1]
-                settings.save()
-                rebuildWindow()
+                imgui.SetCursorPosX(imgui.GetCursorPosX() + indent)
+                local drag = { tpSettings.dragEnabled }
+                if imgui.Checkbox('Drag Enabled', drag) then
+                    tpSettings.dragEnabled = drag[1]
+                    lootWindow.dragEnabled = drag[1]
+                    settings.save()
+                end
+
+                imgui.SetCursorPosX(imgui.GetCursorPosX() + indent)
+                local customScaleOn = { (tpSettings.scale or 0) > 0 }
+                if imgui.Checkbox('Custom Scale', customScaleOn) then
+                    tpSettings.scale = customScaleOn[1] and 1.0 or 0
+                    settings.save()
+                    rebuildWindow()
+                end
+                if customScaleOn[1] then
+                    imgui.SameLine()
+                    local scaleVal = { tpSettings.scale > 0 and tpSettings.scale or 1.0 }
+                    imgui.SetNextItemWidth(120)
+                    if imgui.SliderFloat('##scale', scaleVal, 0.25, 2.5, 'x%.2f') then
+                        tpSettings.scale = scaleVal[1]
+                        settings.save()
+                        rebuildWindow()
+                    end
+                end
+
+                imgui.Spacing()
+                drawGradientHeader('Debug')
+
+                imgui.SetCursorPosX(imgui.GetCursorPosX() + indent)
+                local cnt = { tpSettings.debugCount }
+                imgui.SetNextItemWidth(80)
+                if imgui.InputInt('Items##dbg', cnt) then
+                    local v = cnt[1]
+                    if v >= 1 and v <= 10 then
+                        tpSettings.debugCount = v
+                    end
+                end
+
+                imgui.Spacing()
+                imgui.Separator()
+                imgui.Spacing()
+
+                if styledButton('Reload Layout', availW, false) then
+                    reloadLayout()
+                end
+
+                imgui.EndTabItem()
             end
-        end
 
-        imgui.Spacing()
+            ----------------------------------------------------
+            -- Tab: Mouseover
+            ----------------------------------------------------
+            if imgui.BeginTabItem('Mouseover') then
+                imgui.Spacing()
 
-        -- Debug section (active while settings window is open)
-        drawGradientHeader('Debug')
+                local tt = tpSettings.tooltip
+                local ttEnabled = { tt and tt.enabled or false }
 
-        imgui.SetCursorPosX(imgui.GetCursorPosX() + indent)
-        local cnt = { tpSettings.debugCount }
-        imgui.SetNextItemWidth(80)
-        if imgui.InputInt('Items##dbg', cnt) then
-            local v = cnt[1]
-            if v >= 1 and v <= 10 then
-                tpSettings.debugCount = v
+                imgui.SetCursorPosX(imgui.GetCursorPosX() + indent)
+                if imgui.Checkbox('Show Item Tooltip', ttEnabled) then
+                    tpSettings.tooltip.enabled = ttEnabled[1]
+                    settings.save()
+                end
+                imgui.SameLine()
+                imgui.TextDisabled('(?)')
+                if imgui.IsItemHovered() then
+                    imgui.BeginTooltip()
+                    imgui.PushTextWrapPos(imgui.GetFontSize() * 18)
+                    imgui.TextUnformatted('Hover over an item in the loot pool to see its stats and description.')
+                    imgui.PopTextWrapPos()
+                    imgui.EndTooltip()
+                end
+
+                if tt and tt.enabled then
+                    imgui.Spacing()
+
+                    local subIndent = indent + 5
+                    imgui.SetCursorPosX(imgui.GetCursorPosX() + subIndent)
+                    local ttGear = { tt.gear }
+                    if imgui.Checkbox('Gear##tt', ttGear) then
+                        tpSettings.tooltip.gear = ttGear[1]; settings.save()
+                    end
+                    imgui.SameLine()
+                    local ttUsables = { tt.usables }
+                    if imgui.Checkbox('Usables##tt', ttUsables) then
+                        tpSettings.tooltip.usables = ttUsables[1]; settings.save()
+                    end
+
+                    imgui.SetCursorPosX(imgui.GetCursorPosX() + subIndent)
+                    local ttItems = { tt.items }
+                    if imgui.Checkbox('Items##tt', ttItems) then
+                        tpSettings.tooltip.items = ttItems[1]; settings.save()
+                    end
+                    imgui.SameLine()
+                    local ttKI = { tt.keyItems }
+                    if imgui.Checkbox('Key Items##tt', ttKI) then
+                        tpSettings.tooltip.keyItems = ttKI[1]; settings.save()
+                    end
+                end
+
+                imgui.Spacing()
+                imgui.EndTabItem()
             end
-        end
 
-        imgui.Spacing()
-        imgui.Separator()
-        imgui.Spacing()
-
-        if styledButton('Reload Layout', availW, false) then
-            reloadLayout()
+            imgui.EndTabBar()
         end
     end
     imgui.End()
     imgui.PopStyleVar(1)
+end
+
+------------------------------------------------------------
+-- Item Tooltip
+------------------------------------------------------------
+-- Item type buckets (from FFXI ItemType enum)
+local TOOLTIP_GEAR    = { [4]=true, [5]=true }   -- Weapon, Armor
+local TOOLTIP_USABLES = { [7]=true }              -- UsableItem
+local TOOLTIP_KEY     = { [2]=true }              -- QuestItem
+
+local function tooltipAllowedForType(itemType)
+    local tt = tpSettings and tpSettings.tooltip
+    if not tt or not tt.enabled then return false end
+    if TOOLTIP_GEAR[itemType]    then return tt.gear end
+    if TOOLTIP_USABLES[itemType] then return tt.usables end
+    if TOOLTIP_KEY[itemType]     then return tt.keyItems end
+    return tt.items  -- catch-all: Crystal, Fish, misc Item, etc.
+end
+
+local function drawItemTooltip(items)
+    local entry = lootWindow.getHoveredEntry(items)
+    if not entry or not entry.itemId or entry.itemId == 0 then return end
+
+    local item = AshitaCore:GetResourceManager():GetItemById(entry.itemId)
+    if not item then return end
+
+    if not tooltipAllowedForType(item.Type) then return end
+
+    imgui.BeginTooltip()
+
+    imgui.TextColored({ 1.0, 0.85, 0.2, 1.0 }, entry.name)
+
+    if item.ItemLevel and item.ItemLevel > 0 then
+        imgui.Text('Item Level ' .. tostring(item.ItemLevel))
+    elseif item.Level and item.Level > 0 then
+        imgui.Text('Lv. ' .. tostring(item.Level))
+    end
+
+    local desc = item.Description and item.Description[1]
+    if desc and #desc > 0 then
+        imgui.Separator()
+        imgui.PushTextWrapPos(imgui.GetFontSize() * 22)
+        imgui.TextUnformatted(desc)
+        imgui.PopTextWrapPos()
+    end
+
+    imgui.EndTooltip()
 end
 
 ------------------------------------------------------------
@@ -485,6 +609,7 @@ ashita.events.register('d3d_present', 'present_cb', function()
     -- Debug mode re-generates fake data each frame (responds to debugCount changes)
     local items = settingsOpen[1] and gatherDebugData() or cachedItems
     lootWindow.update(items)
+    drawItemTooltip(items)
 end)
 
 ------------------------------------------------------------
