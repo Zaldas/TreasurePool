@@ -426,6 +426,11 @@ function lootWindow.handleMouse(e)
     return false
 end
 
+function lootWindow.getHoveredEntry(items)
+    if hoveredIdx == nil then return nil end
+    return items[hoveredIdx]
+end
+
 function lootWindow.destroy()
     for _, item in ipairs(lootItems) do
         item:destroy()
