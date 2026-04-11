@@ -1,6 +1,7 @@
 -- width (size[1]) is filled in at runtime from layout.window.width
 return {
     mode = '3slice',
+    pad  = { right = 10 },
     imgTop = {
         path        = 'layouts/assets/ffxi/BgTop.png',
         size        = { 0, 6 },

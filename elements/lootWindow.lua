@@ -25,6 +25,7 @@ local borderEngine  = nil
 local windowBorders = nil       -- { tl, tr, bl, br } uiImages when bgMode='window', else nil
 local bgBorderSize  = 21
 local bgBorderOffset = 1
+local bgPad         = { left = 0, right = 0, top = 0, bottom = 0 }
 local titleText   = nil
 local lotAllBtn   = nil
 local passAllBtn  = nil
@@ -45,6 +46,7 @@ lootWindow.onLotSlot  = nil
 lootWindow.onPassSlot = nil
 lootWindow.onLotAll   = nil
 lootWindow.onPassAll  = nil
+lootWindow.onItemClick = nil
 lootWindow.dragEnabled = true
 
 ------------------------------------------------------------
@@ -105,7 +107,7 @@ local function relayout(count)
     local totalH = H_H + count * R_H + F_H
 
     if bgMode == '3slice' then
-        windowBg:setHeight(totalH)
+        windowBg:setHeight(totalH + bgPad.top + bgPad.bottom)
     else
         windowBg:size(W, totalH)
     end
@@ -182,7 +184,10 @@ function lootWindow.initialize(layoutRef, bgDef, anchorRef, scale)
     -- Window background (full size computed during relayout; first child = renders behind content)
     if bgMode == '3slice' then
         -- Inherit width from layout.window.width; theme files leave size[1] = 0 as a placeholder
-        local W  = layout.window.width
+        -- pad offsets background beyond content bounds (e.g. right = 10 to cover a fading edge)
+        local p = bgDef.pad or {}
+        bgPad = { left = p.left or 0, right = p.right or 0, top = p.top or 0, bottom = p.bottom or 0 }
+        local W  = layout.window.width + bgPad.left + bgPad.right
         local bg = {
             mode      = bgDef.mode,
             imgTop    = { path = bgDef.imgTop.path,    size = { W, bgDef.imgTop.size[2] },    pos = bgDef.imgTop.pos,    color = bgDef.imgTop.color,    sliceBorder = bgDef.imgTop.sliceBorder },
@@ -190,6 +195,8 @@ function lootWindow.initialize(layoutRef, bgDef, anchorRef, scale)
             imgBottom = { path = bgDef.imgBottom.path, size = { W, bgDef.imgBottom.size[2] }, pos = bgDef.imgBottom.pos, color = bgDef.imgBottom.color, sliceBorder = bgDef.imgBottom.sliceBorder },
         }
         windowBg = uiBackground.new(bg, engine)
+        windowBg.posX = -bgPad.left
+        windowBg.posY = -bgPad.top
     elseif bgMode == 'window' then
         windowBg = uiImage.new({
             path  = bgDef.bgPath,
@@ -401,6 +408,10 @@ function lootWindow.handleMouse(e)
                 pressedBtn = item.passBtn
                 item.passBtn:setPressed(true)
                 if item.passBtn.onClick then item.passBtn.onClick() end
+                return false
+            end
+            if item:hitTest(e.x, e.y) then
+                if lootWindow.onItemClick then lootWindow.onItemClick(item:getSlot()) end
                 return false
             end
         end

@@ -37,17 +37,18 @@ local default_settings = T{
         x = 200,
         y = 200,
     },
-    showLotButtons = true,
-    dragEnabled    = true,
-    scale          = 0,    -- 0 = auto (resY/1440); >0 = custom multiplier (0.25-2.5)
-    debugCount     = 10,
-    theme          = 'Plain',
+    showLotButtons    = true,
+    dragEnabled       = true,
+    scale             = 0,    -- 0 = auto (resY/1440); >0 = custom multiplier (0.25-2.5)
+    debugCount        = 10,
+    theme             = 'Plain',
+    serverEpochOffset = 0,    -- os.time() - server_time; calibrated from fresh drops, 0 = unknown
     tooltip = {
-        enabled  = true,
-        gear     = true,   -- Weapon (4), Armor (5)
-        usables  = true,   -- UsableItem (7)
-        items    = true,   -- Item (1), Crystal (8), misc catch-all
-        keyItems = false,  -- QuestItem (2) — rare in pool
+        enabled    = true,
+        gear       = true,   -- Weapon (4), Armor (5)
+        usables    = true,   -- UsableItem (7)
+        items      = true,   -- everything else: seals, crystals, key items, etc.
+        lotDetails = true,   -- show lot details popup on row click
     },
 }
 
@@ -82,14 +83,25 @@ local THEME_LIST = buildThemeList()
 local tpSettings       = nil
 local settingsOpen     = { false }
 local cachedItems      = {}
+local lotDetailsSlot   = nil
+local lotDetailsOpen   = { false }
+
+-- Server epoch offset: os.time() - server_current_time.
+-- Server timestamps (StartTime in packets, DropTime/TimeToLive in memory) use a
+-- server-specific epoch, not Unix time.  Once we've seen a fresh drop we can derive
+-- the offset: for a fresh drop elapsed ≈ 0, so candidate = os.time() - StartTime ≈ offset.
+-- We keep the minimum seen (fresh drops always win) and persist it across sessions.
+-- expiresAt_unix = TimeToLive + serverEpochOffset  (TimeToLive is absolute server-epoch expiry)
+local serverEpochOffset = nil  -- nil = not yet calibrated this session
 
 ------------------------------------------------------------
 -- Cache helpers (packet-driven insertion sort)
 ------------------------------------------------------------
 local function insertSorted(item)
-    -- Remove any existing entry for this slot first (update case)
+    -- Remove any existing entry for this slot, preserving accumulated partyLots
     for i = #cachedItems, 1, -1 do
         if cachedItems[i].slot == item.slot then
+            item.partyLots = cachedItems[i].partyLots or {}
             table.remove(cachedItems, i)
             break
         end
@@ -113,26 +125,51 @@ local function removeFromCache(slot)
     end
 end
 
--- Maps FFXI DropTime value -> Unix expiry timestamp (os.time() + 300).
--- DropTime is an FFXI-epoch timestamp, not Unix, so we can't do math on it
--- directly. Instead we use it as a unique key and record when we first saw
--- each item.
-local dropTimeCache = {}
-
 local function getPlayerName()
     local party = AshitaCore:GetMemoryManager():GetParty()
     local name  = party and party:GetMemberName(0)
     return (type(name) == 'string' and #name > 0) and name or 'You'
 end
 
+-- Calibrate the server epoch offset from a packet StartTime.
+-- Fresh drops have elapsed ≈ 0 so candidate ≈ true offset.
+-- We keep the minimum seen (fresh drops always beat zone-in syncs) and persist it.
+local function calibrateEpochOffset(startTime)
+    local candidate = os.time() - startTime
+
+    -- If the saved offset makes this active item appear already expired,
+    -- the epoch has changed (server restart). Invalidate and recalibrate.
+    if serverEpochOffset ~= nil then
+        local remaining = startTime + 300 + serverEpochOffset - os.time()
+        if remaining <= 0 then
+            serverEpochOffset = nil
+        end
+    end
+
+    if serverEpochOffset == nil or candidate < serverEpochOffset then
+        serverEpochOffset = candidate
+        if tpSettings then
+            tpSettings.serverEpochOffset = serverEpochOffset
+            settings.save()
+        end
+    end
+end
+
+-- Convert a server-epoch timestamp to a Unix expiry timestamp.
+-- TimeToLive (= DropTime + 300) is the absolute server-epoch expiry time.
+local function serverToUnixExpiry(serverTimestamp)
+    if serverEpochOffset then
+        return serverTimestamp + serverEpochOffset
+    end
+    return os.time() + 300  -- fallback: no calibration yet
+end
+
 local function buildItemFromPacket(packet)
     local itemId   = packet.TrophyItemNo
+    local slotIdx  = packet.TrophyItemIndex
     local resource = AshitaCore:GetResourceManager():GetItemById(itemId)
-    local now      = os.time()
 
-    if not dropTimeCache[packet.StartTime] then
-        dropTimeCache[packet.StartTime] = now + 300
-    end
+    calibrateEpochOffset(packet.StartTime)
 
     local winnerName = ffi.string(packet.LootActName, 16):match('^[^%z]*')
     if packet.LootPoint == 0 or #winnerName < 3 then
@@ -140,14 +177,15 @@ local function buildItemFromPacket(packet)
     end
 
     return {
-        slot       = packet.TrophyItemIndex,
+        slot       = slotIdx,
         itemId     = itemId,
         name       = (resource and resource.Name[1]) or 'Unknown',
         lot        = packet.IsLocallyLotted,
         winningLot = packet.LootPoint,
         winnerName = winnerName,
-        expiresAt  = dropTimeCache[packet.StartTime],
+        expiresAt  = serverToUnixExpiry(packet.StartTime + 300),
         playerName = getPlayerName(),
+        partyLots  = {},
     }
 end
 
@@ -164,10 +202,18 @@ end
 ------------------------------------------------------------
 -- Debug test data
 ------------------------------------------------------------
+local dPartyLots = {
+    ['Matsuno']  = 543,
+    ['Jorin']    = 821,
+    ['Beatrice'] = 412,
+    ['George']   = 65535,  -- passed
+    ['Zalyx']    = 765,
+}
+
 local dTreasurePool = {
     -- Gear (Weapon/Armor — type 4/5)
     { itemId = 17440, name = "Kraken Club",        lot = 0,     lotWinner = "",               winningLot = 0,   timeToLive = 280 },
-    { itemId = 12562, name = "Osode of Flames",    lot = 0,     lotWinner = "Matsuno",        winningLot = 543, timeToLive = 220 },
+    { itemId = 12562, name = "Kirin's Osode",       lot = 0,     lotWinner = "Matsuno",        winningLot = 543, timeToLive = 220 },
     { itemId = 18425, name = "Perdu Blade",        lot = 0,     lotWinner = "Jorin",          winningLot = 821, timeToLive = 90  },
     { itemId = 17707, name = "Biting Sword",       lot = 0,     lotWinner = "Beatrice",       winningLot = 412, timeToLive = 35  },
     { itemId = 12818, name = "Byakko's Haidate",   lot = 765,   lotWinner = "You",            winningLot = 765, timeToLive = 250 },
@@ -210,7 +256,6 @@ local function gatherTreasureData()
     local inv        = AshitaCore:GetMemoryManager():GetInventory()
     local resMgr     = AshitaCore:GetResourceManager()
     local playerName = getPlayerName()
-    local now        = os.time()
 
     for i = 0, 9 do
         local item = inv:GetTreasurePoolItem(i)
@@ -225,11 +270,6 @@ local function gatherTreasureData()
                 winnerName = 'Unknown'
             end
 
-            -- First time we see this DropTime, record expiry as now + 300s
-            if not dropTimeCache[item.DropTime] then
-                dropTimeCache[item.DropTime] = now + 300
-            end
-
             result[#result + 1] = {
                 slot       = i,
                 itemId     = item.ItemId,
@@ -237,8 +277,9 @@ local function gatherTreasureData()
                 lot        = item.Lot,
                 winningLot = item.WinningLot,
                 winnerName = winnerName,
-                expiresAt  = dropTimeCache[item.DropTime],
+                expiresAt  = serverToUnixExpiry(item.TimeToLive),
                 playerName = playerName,
+                partyLots  = {},
             }
         end
     end
@@ -260,6 +301,7 @@ local function gatherDebugData()
             winnerName = item.lotWinner == 'You' and playerName or item.lotWinner,
             expiresAt  = os.time() + item.timeToLive,
             playerName = playerName,
+            partyLots  = dPartyLots,
         }
     end
     return result
@@ -300,6 +342,13 @@ local function wireCallbacks()
             print(chat.header('TreasurePool') .. chat.message('Debug: Pass All queued'))
         end
     end
+
+    lootWindow.onItemClick = function(slot)
+        local tt = tpSettings and tpSettings.tooltip
+        if not tt or not tt.lotDetails then return end
+        lotDetailsSlot = slot
+        lotDetailsOpen[1] = true
+    end
 end
 
 local function getActiveBgDef()
@@ -326,6 +375,11 @@ end
 ------------------------------------------------------------
 ashita.events.register('load', 'load_cb', function()
     tpSettings = settings.load(default_settings)
+
+    -- Restore persisted epoch offset (0 = never calibrated)
+    if tpSettings.serverEpochOffset and tpSettings.serverEpochOffset > 0 then
+        serverEpochOffset = tpSettings.serverEpochOffset
+    end
 
     lootWindow.initialize(layout, getActiveBgDef(), tpSettings.anchor, getEffectiveScale())
     lootWindow.dragEnabled = tpSettings.dragEnabled
@@ -476,9 +530,9 @@ local function drawSettingsWindow()
             end
 
             ----------------------------------------------------
-            -- Tab: Mouseover
+            -- Tab: Interactions
             ----------------------------------------------------
-            if imgui.BeginTabItem('Mouseover') then
+            if imgui.BeginTabItem('Interactions') then
                 imgui.Spacing()
 
                 local tt = tpSettings.tooltip
@@ -502,28 +556,55 @@ local function drawSettingsWindow()
                 if tt and tt.enabled then
                     imgui.Spacing()
 
-                    local subIndent = indent + 5
+                    local subIndent = indent + 10
+                    local function ttHint(text)
+                        imgui.SameLine()
+                        imgui.TextDisabled('(?)')
+                        if imgui.IsItemHovered() then
+                            imgui.BeginTooltip()
+                            imgui.TextUnformatted(text)
+                            imgui.EndTooltip()
+                        end
+                    end
+
                     imgui.SetCursorPosX(imgui.GetCursorPosX() + subIndent)
                     local ttGear = { tt.gear }
                     if imgui.Checkbox('Gear##tt', ttGear) then
                         tpSettings.tooltip.gear = ttGear[1]; settings.save()
                     end
-                    imgui.SameLine()
+                    ttHint('Weapons and armor.')
+
+                    imgui.SetCursorPosX(imgui.GetCursorPosX() + subIndent)
                     local ttUsables = { tt.usables }
                     if imgui.Checkbox('Usables##tt', ttUsables) then
                         tpSettings.tooltip.usables = ttUsables[1]; settings.save()
                     end
+                    ttHint('Consumable items: food, medicines, scrolls, meds, etc.')
 
                     imgui.SetCursorPosX(imgui.GetCursorPosX() + subIndent)
                     local ttItems = { tt.items }
                     if imgui.Checkbox('Items##tt', ttItems) then
                         tpSettings.tooltip.items = ttItems[1]; settings.save()
                     end
-                    imgui.SameLine()
-                    local ttKI = { tt.keyItems }
-                    if imgui.Checkbox('Key Items##tt', ttKI) then
-                        tpSettings.tooltip.keyItems = ttKI[1]; settings.save()
-                    end
+                    ttHint('Everything else: seals, crystals, key items, etc.')
+                end
+
+                imgui.Spacing()
+                imgui.Separator()
+                imgui.Spacing()
+
+                imgui.SetCursorPosX(imgui.GetCursorPosX() + indent)
+                local ttLD = { tt and tt.lotDetails or false }
+                if imgui.Checkbox('Show Lot Details', ttLD) then
+                    tpSettings.tooltip.lotDetails = ttLD[1]
+                    settings.save()
+                end
+                imgui.SameLine()
+                imgui.TextDisabled('(?)')
+                if imgui.IsItemHovered() then
+                    imgui.BeginTooltip()
+                    imgui.TextUnformatted('Left-clicking an item row opens a window\nshowing all party lot and pass results.')
+                    imgui.EndTooltip()
                 end
 
                 imgui.Spacing()
@@ -538,20 +619,148 @@ local function drawSettingsWindow()
 end
 
 ------------------------------------------------------------
+-- Lot Details Window
+------------------------------------------------------------
+local function drawLotDetailsWindow(items)
+    if not lotDetailsOpen[1] or lotDetailsSlot == nil then return end
+
+    local entry = nil
+    for _, item in ipairs(items) do
+        if item.slot == lotDetailsSlot then entry = item; break end
+    end
+    if not entry then lotDetailsOpen[1] = false; return end
+
+    imgui.SetNextWindowSize({ 220, 0 }, ImGuiCond_Always)
+    imgui.PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0)
+    if imgui.Begin('Lot Details##lotdetails', lotDetailsOpen, ImGuiWindowFlags_NoResize) then
+        imgui.TextColored({ 1.0, 0.85, 0.2, 1.0 }, entry.name)
+        imgui.Separator()
+        imgui.Spacing()
+
+        local any = false
+        -- Sort names for stable display order
+        local names = {}
+        for name in pairs(entry.partyLots or {}) do names[#names + 1] = name end
+        table.sort(names)
+
+        for _, name in ipairs(names) do
+            local lot = entry.partyLots[name]
+            any = true
+            if lot == 65535 then
+                imgui.TextDisabled(name .. ':  Pass')
+            else
+                local lotStr = (lot < 10 and '00' or lot < 100 and '0' or '') .. tostring(lot)
+                imgui.Text(name .. ':  ' .. lotStr)
+            end
+        end
+
+        if not any then
+            imgui.TextDisabled('No lots recorded yet.')
+        end
+
+        imgui.Spacing()
+    end
+    imgui.End()
+    imgui.PopStyleVar(1)
+end
+
+------------------------------------------------------------
 -- Item Tooltip
 ------------------------------------------------------------
 -- Item type buckets (from FFXI ItemType enum)
 local TOOLTIP_GEAR    = { [4]=true, [5]=true }   -- Weapon, Armor
 local TOOLTIP_USABLES = { [7]=true }              -- UsableItem
-local TOOLTIP_KEY     = { [2]=true }              -- QuestItem
+
+-- FFXI item descriptions contain SJIS special byte sequences for element icons
+-- and color codes that ImGui cannot render.  Strip/replace them before display.
+local _EF = string.char(239)   -- 0xEF: prefix for icon sequences
+local _1E = string.char(30)    -- 0x1E: color-code prefix
+local _ELEM_MAP = {
+    { string.char(31), '[Fire]'     },  -- 0x1F
+    { string.char(32), '[Ice]'      },  -- 0x20
+    { string.char(33), '[Wind]'     },  -- 0x21
+    { string.char(34), '[Earth]'    },  -- 0x22
+    { string.char(35), '[Thunder]'  },  -- 0x23
+    { string.char(36), '[Water]'    },  -- 0x24
+    { string.char(37), '[Light]'    },  -- 0x25
+    { string.char(38), '[Darkness]' },  -- 0x26
+}
+
+-- Plain (non-pattern) find+replace — avoids gsub pattern issues with bytes
+-- like 0x25 (37 = '%'), which is the Lua pattern escape character.
+local function strReplaceAll(s, from, to)
+    local parts = {}
+    local i = 1
+    while i <= #s do
+        local j = string.find(s, from, i, true)
+        if j then
+            parts[#parts + 1] = string.sub(s, i, j - 1)
+            parts[#parts + 1] = to
+            i = j + #from
+        else
+            parts[#parts + 1] = string.sub(s, i)
+            break
+        end
+    end
+    return table.concat(parts)
+end
+
+local function cleanDescription(desc)
+    if not desc or #desc == 0 then return desc end
+    local s = desc
+    -- Replace known element icon sequences (\xEF + element byte) with labels.
+    -- Done with plain string search to avoid pattern issues (byte 0x25 = '%').
+    for _, pair in ipairs(_ELEM_MAP) do
+        s = strReplaceAll(s, _EF .. pair[1], pair[2])
+    end
+    -- Strip any remaining \xEF + byte (unknown icon sequences).
+    -- 0xEF (239) is not a Lua pattern special char, so gsub is safe here.
+    s = s:gsub(_EF .. '.', '')
+    -- Strip FFXI color codes: \x1E + any byte.
+    s = s:gsub(_1E .. '.', '')
+    return s
+end
+
+-- Job abbreviations indexed by FFXI job ID (1=WAR … 22=RUN).
+-- Jobs bitmask: bit.band(item.Jobs, 2^jobId) ~= 0  (confirmed from luashitacast)
+local _JOB_ABBR = {
+    'WAR','MNK','WHM','BLM','RDM','THF','PLD','DRK',
+    'BST','BRD','RNG','SAM','NIN','DRG','SMN','BLU',
+    'COR','PUP','DNC','SCH','GEO','RUN',
+}
+local _JOB_COUNT = 22
+local _JOB_ALL_MASK = (function()
+    local m = 0
+    for i = 1, _JOB_COUNT do m = m + 2^i end
+    return m
+end)()
+
+-- Returns a list of lines, each with at most 7 job abbreviations.
+local function buildJobsLines(jobsMask)
+    if not jobsMask or jobsMask == 0 then return nil end
+    if bit.band(jobsMask, _JOB_ALL_MASK) == _JOB_ALL_MASK then return { 'All Jobs' } end
+    local list = {}
+    for i = 1, _JOB_COUNT do
+        if bit.band(jobsMask, 2^i) ~= 0 then
+            list[#list + 1] = _JOB_ABBR[i]
+        end
+    end
+    if #list == 0 then return nil end
+    local lines = {}
+    for i = 1, #list, 7 do
+        local chunk = {}
+        for j = i, math.min(i + 6, #list) do chunk[#chunk + 1] = list[j] end
+        lines[#lines + 1] = table.concat(chunk, ' ')
+    end
+    return lines
+end
 
 local function tooltipAllowedForType(itemType)
     local tt = tpSettings and tpSettings.tooltip
     if not tt or not tt.enabled then return false end
     if TOOLTIP_GEAR[itemType]    then return tt.gear end
     if TOOLTIP_USABLES[itemType] then return tt.usables end
-    if TOOLTIP_KEY[itemType]     then return tt.keyItems end
-    return tt.items  -- catch-all: Crystal, Fish, misc Item, etc.
+    return tt.items  -- catch-all: seals, crystals, key items, fish, etc.
 end
 
 local function drawItemTooltip(items)
@@ -573,11 +782,18 @@ local function drawItemTooltip(items)
         imgui.Text('Lv. ' .. tostring(item.Level))
     end
 
+    local jobsLines = buildJobsLines(item.Jobs)
+    if jobsLines then
+        for _, line in ipairs(jobsLines) do
+            imgui.TextDisabled(line)
+        end
+    end
+
     local desc = item.Description and item.Description[1]
     if desc and #desc > 0 then
         imgui.Separator()
         imgui.PushTextWrapPos(imgui.GetFontSize() * 22)
-        imgui.TextUnformatted(desc)
+        imgui.TextUnformatted(cleanDescription(desc))
         imgui.PopTextWrapPos()
     end
 
@@ -610,6 +826,7 @@ ashita.events.register('d3d_present', 'present_cb', function()
     local items = settingsOpen[1] and gatherDebugData() or cachedItems
     lootWindow.update(items)
     drawItemTooltip(items)
+    drawLotDetailsWindow(items)
 end)
 
 ------------------------------------------------------------
@@ -657,10 +874,15 @@ ashita.events.register('packet_in', 'treasurepool_packet_in', function(e)
                     entry.winningLot = packet.LootPoint
                     entry.winnerName = (packet.LootPoint > 0 and #winnerName >= 3) and winnerName or ''
 
-                    -- Update local lot if this action was ours
+                    -- Record this actor's lot/pass in partyLots
                     local actorName = ffi.string(packet.sLootName2, 24):match('^[^%z]*')
+                    if #actorName >= 3 then
+                        entry.partyLots[actorName] = (packet.EntryPoint < 0) and 65535 or packet.EntryPoint
+                    end
+
+                    -- Update local lot if this action was ours
                     if actorName == getPlayerName() then
-                        entry.lot = (packet.EntryPoint < 0) and 65535 or packet.EntryPoint
+                        entry.lot = entry.partyLots[actorName]
                     end
                     break
                 end
@@ -679,5 +901,18 @@ ashita.events.register('command', 'treasurepool_command', function(e)
         return
     end
     e.blocked = true
+
+    if args[2] == 'epoch' then
+        local offset = serverEpochOffset
+        if offset then
+            print(chat.header('TreasurePool') .. chat.message(
+                string.format('serverEpochOffset=%d  os.time=%d  server_time=%d',
+                    offset, os.time(), os.time() - offset)))
+        else
+            print(chat.header('TreasurePool') .. chat.warning('serverEpochOffset not yet calibrated.'))
+        end
+        return
+    end
+
     settingsOpen[1] = not settingsOpen[1]
 end)
