@@ -15,6 +15,15 @@ local lootWindow = require('elements/lootWindow')
 local state      = require('state')
 local layout     = require('layouts/default')
 
+-- Ashita 4.3 changed BeginChild: boolean cflags replaced with ImGuiChildFlags_* enum.
+-- Wrap to handle both branches transparently.
+local function imguiBeginChild(id, size, borders)
+    if ImGuiChildFlags_None ~= nil then
+        return imgui.BeginChild(id, size, borders and ImGuiChildFlags_Borders or ImGuiChildFlags_None)
+    end
+    return imgui.BeginChild(id, size, borders)
+end
+
 ------------------------------------------------------------
 -- FFI for client-to-server packets (lot 0x0041, pass 0x0042)
 ------------------------------------------------------------
@@ -666,7 +675,10 @@ local function drawLotDetailsWindow(items)
         end
     end
 
-    imgui.SetNextWindowSize({ 220, 200 }, ImGuiCond_Always)
+    local rowH   = imgui.GetTextLineHeightWithSpacing()
+    local scrollH = rowH * 8
+
+    imgui.SetNextWindowSize({ 220, 0 }, ImGuiCond_Always)
     imgui.PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0)
     if imgui.Begin('Lot Details##lotdetails', lotDetailsOpen, ImGuiWindowFlags_NoResize) then
         imgui.TextColored({ 1.0, 0.85, 0.2, 1.0 }, entry.name)
@@ -676,6 +688,7 @@ local function drawLotDetailsWindow(items)
         if not hasAny then
             imgui.TextDisabled('No party members found.')
         else
+            imguiBeginChild('##lotscroll', { 0, scrollH }, false)
             local first = true
             for i = 1, 3 do
                 if #parties[i] > 0 then
@@ -688,6 +701,7 @@ local function drawLotDetailsWindow(items)
                     first = false
                 end
             end
+            imgui.EndChild()
         end
     end
     imgui.End()
