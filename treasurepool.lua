@@ -17,8 +17,9 @@ local layout     = require('layouts/default')
 
 -- Ashita 4.3 changed BeginChild: boolean cflags replaced with ImGuiChildFlags_* enum.
 -- Wrap to handle both branches transparently.
+local _newChildFlags = ImGuiChildFlags_None ~= nil
 local function imguiBeginChild(id, size, borders)
-    if ImGuiChildFlags_None ~= nil then
+    if _newChildFlags then
         return imgui.BeginChild(id, size, borders and ImGuiChildFlags_Borders or ImGuiChildFlags_None)
     end
     return imgui.BeginChild(id, size, borders)
@@ -369,11 +370,8 @@ ashita.events.register('load', 'load_cb', function()
 
     settings.register('settings', 'settings_update', function(s)
         if s ~= nil then
-            lootWindow.destroy()
             tpSettings = s
-            lootWindow.initialize(layout, getActiveBgDef(), tpSettings.anchor, getEffectiveScale())
-            lootWindow.dragEnabled = tpSettings.dragEnabled
-            wireCallbacks()
+            rebuildWindow()
         end
     end)
 end)
