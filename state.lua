@@ -70,21 +70,29 @@ pcall(ffi.cdef, [[
 -- State tables
 ------------------------------------------------------------
 -- [slotIdx] = { [name] = { lot=value, passed=bool } }
-local memberLots   = {}
-local lotAllQueue  = {}
-local passAllQueue = {}
-local frameCount   = 0
+local memberLots         = {}
+local memberLotItemKeys  = {}
+local lotAllQueue        = {}
+local passAllQueue       = {}
+local frameCount         = 0
 
 ------------------------------------------------------------
 -- Packet handling
 ------------------------------------------------------------
 function state.handlePacketIn(e)
-    -- 0x00D2: Trophy List — clear member lots for this slot
+    -- 0x00D2: Trophy List — clear member lots for this slot only when the item changes
     if e.id == 0x00D2 and not e.injected then
         local packet = ffi.cast('tp_packet_trophylist_s2c_t*', e.data_modified_raw)
-        if packet.TrophyItemNo ~= 0 then
-            local slotIdx = packet.TrophyItemIndex
-            memberLots[slotIdx] = {}
+        local slotIdx = packet.TrophyItemIndex
+        if packet.TrophyItemNo == 0 then
+            memberLots[slotIdx] = nil
+            memberLotItemKeys[slotIdx] = nil
+        else
+            local itemKey = tostring(packet.TrophyItemNo) .. ':' .. tostring(packet.StartTime)
+            if memberLotItemKeys[slotIdx] ~= itemKey then
+                memberLots[slotIdx] = {}
+                memberLotItemKeys[slotIdx] = itemKey
+            end
         end
         return
     end
@@ -168,10 +176,11 @@ function state.addPassAll(items)
 end
 
 function state.reset()
-    memberLots   = {}
-    lotAllQueue  = {}
-    passAllQueue = {}
-    frameCount   = 0
+    memberLots         = {}
+    memberLotItemKeys  = {}
+    lotAllQueue        = {}
+    passAllQueue       = {}
+    frameCount         = 0
 end
 
 function state.getMemberLots()

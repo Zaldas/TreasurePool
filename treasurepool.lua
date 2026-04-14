@@ -42,7 +42,6 @@ local default_settings = T{
     scale             = 0,    -- 0 = auto (resY/1440); >0 = custom multiplier (0.25-2.5)
     debugCount        = 10,
     theme             = 'Plain',
-    serverEpochOffset = 0,    -- os.time() - server_time; calibrated from fresh drops, 0 = unknown
     tooltip = {
         enabled    = true,
         gear       = true,   -- Weapon (4), Armor (5)
@@ -86,14 +85,6 @@ local cachedItems      = {}
 local lotDetailsSlot   = nil
 local lotDetailsOpen   = { false }
 
--- Server epoch offset: os.time() - server_current_time.
--- Server timestamps (StartTime in packets, DropTime/TimeToLive in memory) use a
--- server-specific epoch, not Unix time.  Once we've seen a fresh drop we can derive
--- the offset: for a fresh drop elapsed ≈ 0, so candidate = os.time() - StartTime ≈ offset.
--- We keep the minimum seen (fresh drops always win) and persist it across sessions.
--- expiresAt_unix = TimeToLive + serverEpochOffset  (TimeToLive is absolute server-epoch expiry)
-local serverEpochOffset = nil  -- nil = not yet calibrated this session
-
 ------------------------------------------------------------
 -- Cache helpers (packet-driven insertion sort)
 ------------------------------------------------------------
@@ -131,45 +122,28 @@ local function getPlayerName()
     return (type(name) == 'string' and #name > 0) and name or 'You'
 end
 
--- Calibrate the server epoch offset from a packet StartTime.
--- Fresh drops have elapsed ≈ 0 so candidate ≈ true offset.
--- We keep the minimum seen (fresh drops always beat zone-in syncs) and persist it.
-local function calibrateEpochOffset(startTime)
-    local candidate = os.time() - startTime
-
-    -- If the saved offset makes this active item appear already expired,
-    -- the epoch has changed (server restart). Invalidate and recalibrate.
-    if serverEpochOffset ~= nil then
-        local remaining = startTime + 300 + serverEpochOffset - os.time()
-        if remaining <= 0 then
-            serverEpochOffset = nil
+local function buildPartyLotsForSlot(slotIdx)
+    local result = {}
+    local memberLots = state.getMemberLots()[slotIdx]
+    if not memberLots then
+        return result
+    end
+    for name, info in pairs(memberLots) do
+        if type(name) == 'string' and #name >= 3 and type(info) == 'table' then
+            if info.passed then
+                result[name] = 65535
+            elseif type(info.lot) == 'number' then
+                result[name] = info.lot
+            end
         end
     end
-
-    if serverEpochOffset == nil or candidate < serverEpochOffset then
-        serverEpochOffset = candidate
-        if tpSettings then
-            tpSettings.serverEpochOffset = serverEpochOffset
-            settings.save()
-        end
-    end
-end
-
--- Convert a server-epoch timestamp to a Unix expiry timestamp.
--- TimeToLive (= DropTime + 300) is the absolute server-epoch expiry time.
-local function serverToUnixExpiry(serverTimestamp)
-    if serverEpochOffset then
-        return serverTimestamp + serverEpochOffset
-    end
-    return os.time() + 300  -- fallback: no calibration yet
+    return result
 end
 
 local function buildItemFromPacket(packet)
     local itemId   = packet.TrophyItemNo
     local slotIdx  = packet.TrophyItemIndex
     local resource = AshitaCore:GetResourceManager():GetItemById(itemId)
-
-    calibrateEpochOffset(packet.StartTime)
 
     local winnerName = ffi.string(packet.LootActName, 16):match('^[^%z]*')
     if packet.LootPoint == 0 or #winnerName < 3 then
@@ -183,9 +157,9 @@ local function buildItemFromPacket(packet)
         lot        = packet.IsLocallyLotted,
         winningLot = packet.LootPoint,
         winnerName = winnerName,
-        expiresAt  = serverToUnixExpiry(packet.StartTime + 300),
+        expiresAt  = os.time() + 300,
         playerName = getPlayerName(),
-        partyLots  = {},
+        partyLots  = buildPartyLotsForSlot(slotIdx),
     }
 end
 
@@ -277,9 +251,9 @@ local function gatherTreasureData()
                 lot        = item.Lot,
                 winningLot = item.WinningLot,
                 winnerName = winnerName,
-                expiresAt  = serverToUnixExpiry(item.TimeToLive),
+                expiresAt  = os.time() + item.TimeToLive,  -- TimeToLive is remaining seconds, not a server-epoch timestamp
                 playerName = playerName,
-                partyLots  = {},
+                partyLots  = buildPartyLotsForSlot(i),
             }
         end
     end
@@ -375,11 +349,6 @@ end
 ------------------------------------------------------------
 ashita.events.register('load', 'load_cb', function()
     tpSettings = settings.load(default_settings)
-
-    -- Restore persisted epoch offset (0 = never calibrated)
-    if tpSettings.serverEpochOffset and tpSettings.serverEpochOffset > 0 then
-        serverEpochOffset = tpSettings.serverEpochOffset
-    end
 
     lootWindow.initialize(layout, getActiveBgDef(), tpSettings.anchor, getEffectiveScale())
     lootWindow.dragEnabled = tpSettings.dragEnabled
@@ -621,6 +590,25 @@ end
 ------------------------------------------------------------
 -- Lot Details Window
 ------------------------------------------------------------
+local function buildLotRow(name, lot, winningLot)
+    local statusStr, statusColor
+    if lot == nil then
+        statusStr   = 'Pending'
+        statusColor = { 0.5, 0.5, 0.5, 1.0 }
+    elseif lot == 65535 then
+        statusStr   = 'Pass'
+        statusColor = { 0.4, 0.6, 0.9, 1.0 }
+    else
+        statusStr = (lot < 10 and '00' or lot < 100 and '0' or '') .. tostring(lot)
+        if lot == winningLot and winningLot > 0 then
+            statusColor = { 1.0, 0.80, 0.2, 1.0 }  -- gold: currently winning
+        else
+            statusColor = { 0.85, 0.85, 0.85, 1.0 }
+        end
+    end
+    return { name = name, status = statusStr, color = statusColor }
+end
+
 local function drawLotDetailsWindow(items)
     if not lotDetailsOpen[1] or lotDetailsSlot == nil then return end
 
@@ -630,35 +618,77 @@ local function drawLotDetailsWindow(items)
     end
     if not entry then lotDetailsOpen[1] = false; return end
 
-    imgui.SetNextWindowSize({ 220, 0 }, ImGuiCond_Always)
+    -- Build per-party rows: parties[1..3] map to main party, ally1, ally2.
+    -- Members are iterated in party order (0-17); empty slots skipped via GetMemberIsActive.
+    local parties   = { {}, {}, {} }
+    local seenNames = {}
+
+    local partyMem = AshitaCore:GetMemoryManager():GetParty()
+    if partyMem then
+        for i = 0, 17 do
+            if partyMem:GetMemberIsActive(i) ~= 0 then
+                local name = partyMem:GetMemberName(i)
+                if name and type(name) == 'string' and #name >= 3 then
+                    local partyIdx = math.floor(i / 6) + 1  -- 1=main, 2=ally1, 3=ally2
+                    local lot = entry.partyLots and entry.partyLots[name]
+                    local row = buildLotRow(name, lot, entry.winningLot)
+                    parties[partyIdx][#parties[partyIdx] + 1] = row
+                    seenNames[name] = true
+                end
+            end
+        end
+    end
+
+    -- Actioned members no longer in the party go at the end of the main party column
+    local extras = {}
+    for name in pairs(entry.partyLots or {}) do
+        if not seenNames[name] then extras[#extras + 1] = name end
+    end
+    table.sort(extras)
+    for _, name in ipairs(extras) do
+        local lot = entry.partyLots[name]
+        parties[1][#parties[1] + 1] = buildLotRow(name, lot, entry.winningLot)
+    end
+
+    local hasAny = #parties[1] > 0 or #parties[2] > 0 or #parties[3] > 0
+
+    local statusColW = 60
+    local gap        = 8
+
+    local function renderRows(rows)
+        for _, row in ipairs(rows) do
+            local tw = imgui.CalcTextSize(row.status)
+            tw = type(tw) == 'table' and (tw[1] or tw.x) or (tw or 0)
+            imgui.SetCursorPosX(statusColW - tw)
+            imgui.TextColored(row.color, row.status)
+            imgui.SameLine(statusColW + gap)
+            imgui.TextColored(row.color, row.name)
+        end
+    end
+
+    imgui.SetNextWindowSize({ 220, 200 }, ImGuiCond_Always)
     imgui.PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0)
     if imgui.Begin('Lot Details##lotdetails', lotDetailsOpen, ImGuiWindowFlags_NoResize) then
         imgui.TextColored({ 1.0, 0.85, 0.2, 1.0 }, entry.name)
         imgui.Separator()
         imgui.Spacing()
 
-        local any = false
-        -- Sort names for stable display order
-        local names = {}
-        for name in pairs(entry.partyLots or {}) do names[#names + 1] = name end
-        table.sort(names)
-
-        for _, name in ipairs(names) do
-            local lot = entry.partyLots[name]
-            any = true
-            if lot == 65535 then
-                imgui.TextDisabled(name .. ':  Pass')
-            else
-                local lotStr = (lot < 10 and '00' or lot < 100 and '0' or '') .. tostring(lot)
-                imgui.Text(name .. ':  ' .. lotStr)
+        if not hasAny then
+            imgui.TextDisabled('No party members found.')
+        else
+            local first = true
+            for i = 1, 3 do
+                if #parties[i] > 0 then
+                    if not first then
+                        imgui.Spacing()
+                        imgui.Separator()
+                        imgui.Spacing()
+                    end
+                    renderRows(parties[i])
+                    first = false
+                end
             end
         end
-
-        if not any then
-            imgui.TextDisabled('No lots recorded yet.')
-        end
-
-        imgui.Spacing()
     end
     imgui.End()
     imgui.PopStyleVar(1)
@@ -901,18 +931,6 @@ ashita.events.register('command', 'treasurepool_command', function(e)
         return
     end
     e.blocked = true
-
-    if args[2] == 'epoch' then
-        local offset = serverEpochOffset
-        if offset then
-            print(chat.header('TreasurePool') .. chat.message(
-                string.format('serverEpochOffset=%d  os.time=%d  server_time=%d',
-                    offset, os.time(), os.time() - offset)))
-        else
-            print(chat.header('TreasurePool') .. chat.warning('serverEpochOffset not yet calibrated.'))
-        end
-        return
-    end
 
     settingsOpen[1] = not settingsOpen[1]
 end)
