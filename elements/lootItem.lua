@@ -37,6 +37,9 @@ end
 function lootItem:init(engine, layout)
     self.super:init()
 
+    local rDef = layout.nameText and layout.nameText.rareImg
+    local eDef = layout.nameText and layout.nameText.exImg
+
     private[self] = {
         timerColors    = layout.timerText.colors,
         buttonsEnabled = true,
@@ -44,6 +47,9 @@ function lootItem:init(engine, layout)
         rowHeight      = 0,
         currentSlot    = nil,
         engine         = engine,
+        nameTextX      = layout.nameText and layout.nameText.pos and layout.nameText.pos[1] or 0,
+        rareImgDef     = rDef,
+        exImgDef       = eDef,
     }
 
     self.timerBar = uiBar.new(layout.timerBar, engine, 1.0)
@@ -69,6 +75,22 @@ function lootItem:init(engine, layout)
 
     self.iconImg = uiImage.new(layout.icon, engine)
     self:addChild(self.iconImg)
+
+    local function makeTagIcon(def)
+        if not def or not def.path then return nil end
+        local img = uiImage.new({
+            path  = def.path,
+            size  = def.size or { 12, 12 },
+            pos   = { 0, def.y or 4 },
+            color = '#FFFFFFFF',
+        }, engine)
+        self:addChild(img)
+        img:hide(utils.VIS_TOKEN)
+        return img
+    end
+
+    self.rareImg = makeTagIcon(rDef)
+    self.exImg   = makeTagIcon(eDef)
 end
 
 function lootItem:setPosition(x, y)
@@ -107,12 +129,48 @@ function lootItem:update(entry, isHovered)
 
     self.nameText:update(entry.name)
 
-    -- Icon: load from item bitmap in client memory
-    if entry.itemId and entry.itemId > 0 then
-        local item = AshitaCore:GetResourceManager():GetItemById(entry.itemId)
-        if item and item.ImageSize and item.ImageSize > 0 then
-            local tex, w, h = private[self].engine:loadImageFromMemory(item.Bitmap, item.ImageSize, entry.itemId)
-            self.iconImg:setTexture(tex, w, h)
+    -- Resource item (used for icon bitmap, Rare/Ex flags)
+    local resItem = entry.itemId and entry.itemId > 0
+        and AshitaCore:GetResourceManager():GetItemById(entry.itemId)
+
+    if resItem and resItem.ImageSize and resItem.ImageSize > 0 then
+        local tex, w, h = private[self].engine:loadImageFromMemory(resItem.Bitmap, resItem.ImageSize, entry.itemId)
+        self.iconImg:setTexture(tex, w, h)
+    end
+
+    -- Rare/Ex tag icons: position dynamically after name text
+    if self.rareImg or self.exImg then
+        local flags  = resItem and resItem.Flags or 0
+        local isRare = bit.band(flags, 0x8000) ~= 0
+        local isEx   = bit.band(flags, 0x4000) ~= 0
+        local rDef  = private[self].rareImgDef
+        local scale = (self.absoluteScale and self.absoluteScale.x) or 1
+        local baseX  = private[self].nameTextX
+                     + self.nameText:getRenderedWidth() / scale
+                     + (rDef and rDef.gap or 5)
+
+        if self.rareImg then
+            if isRare then
+                self.rareImg.posX = baseX
+                self.rareImg:layoutElement()
+                self.rareImg:show(utils.VIS_TOKEN)
+            else
+                self.rareImg:hide(utils.VIS_TOKEN)
+            end
+        end
+
+        if self.exImg then
+            if isEx then
+                local exX = baseX
+                if isRare and self.rareImg then
+                    exX = baseX + (rDef and rDef.size and rDef.size[1] or 12) + 2
+                end
+                self.exImg.posX = exX
+                self.exImg:layoutElement()
+                self.exImg:show(utils.VIS_TOKEN)
+            else
+                self.exImg:hide(utils.VIS_TOKEN)
+            end
         end
     end
 
@@ -187,6 +245,9 @@ function lootItem:update(entry, isHovered)
     self.timerBar:update()
 
     self.separator:update()
+
+    if self.rareImg then self.rareImg:update() end
+    if self.exImg   then self.exImg:update()   end
 
     private[self].currentSlot = entry.slot
 end

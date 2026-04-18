@@ -121,6 +121,13 @@ function uiText:applyLayout()
     self.fontObj:set_font_height(private[self].fontSize * self.absoluteScale.y)
 end
 
+-- Returns rendered text width in screen pixels (0 if not yet created or empty).
+function uiText:getRenderedWidth()
+    if not self.isEnabled or not self.isCreated or not self.fontObj then return 0 end
+    local _, rect = self.fontObj:get_texture()
+    return rect and rect.right or 0
+end
+
 function uiText:update(text)
     if not self.isEnabled then return end
 

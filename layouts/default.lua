@@ -57,6 +57,17 @@ local layout = {
             bold        = true,
             align       = 'left',
             pos         = { TEXT_X, 3 },
+            rareImg = {
+                path = 'layouts/assets/Rare-Icon.png',
+                size = { 12, 12 },
+                y    = 5,
+                gap  = 5,
+            },
+            exImg = {
+                path = 'layouts/assets/Ex-Icon.png',
+                size = { 12, 12 },
+                y    = 5,
+            },
         },
 
         statusText = {
