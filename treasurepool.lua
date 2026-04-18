@@ -196,20 +196,19 @@ local dPartyLots = {
 
 local dTreasurePool = {
     -- Gear (Weapon/Armor — type 4/5)
-    { itemId = 17440, name = "Kraken Club",        lot = 0,     lotWinner = "",               winningLot = 0,   timeToLive = 280 },
-    { itemId = 12562, name = "Kirin's Osode",       lot = 0,     lotWinner = "Matsuno",        winningLot = 543, timeToLive = 220 },
-    { itemId = 18425, name = "Perdu Blade",        lot = 0,     lotWinner = "Jorin",          winningLot = 821, timeToLive = 90  },
-    { itemId = 17707, name = "Biting Sword",       lot = 0,     lotWinner = "Beatrice",       winningLot = 412, timeToLive = 35  },
-    { itemId = 12818, name = "Byakko's Haidate",   lot = 765,   lotWinner = "You",            winningLot = 765, timeToLive = 250 },
-    { itemId = 17707, name = "Martial Anelace",    lot = 312,   lotWinner = "Matsuno",        winningLot = 543, timeToLive = 200 },
-    { itemId = 14006, name = "Zenith Mitts",       lot = 65535, lotWinner = "Jorin",          winningLot = 720, timeToLive = 120 },
-    { itemId = 14488, name = "Homam Corazza",      lot = 65535, lotWinner = "",               winningLot = 0,   timeToLive = 270 },
-    -- Usables (type 7) — Miratete's Memoirs
-    { itemId = 4247,  name = "Miratete's Memoirs", lot = 0,     lotWinner = "",               winningLot = 0,   timeToLive = 200 },
-    -- Items catch-all (type 1) — Kindred's Seal
-    { itemId = 1127,  name = "Kindred's Seal",     lot = 0,     lotWinner = "",               winningLot = 0,   timeToLive = 180 },
-    -- Key Item (type 2) — tooltip will be empty since KI data is not in the regular item DATs
-    { itemId = 606,   name = "Limit Breaker",      lot = 0,     lotWinner = "",               winningLot = 0,   timeToLive = 150 },
+    { itemId = 17440, name = "Kraken Club",        lot = 0,     lotWinner = "",         winningLot = 0,   timeToLive = 280 }, -- Rare
+    { itemId = 12562, name = "Kirin's Osode",      lot = 0,     lotWinner = "Matsuno",  winningLot = 543, timeToLive = 220 }, -- Rare
+    { itemId = 18425, name = "Perdu Blade",        lot = 0,     lotWinner = "Jorin",    winningLot = 821, timeToLive = 90  }, -- Rare+Ex
+    { itemId = 17707, name = "Martial Anelace",    lot = 0,     lotWinner = "Beatrice", winningLot = 412, timeToLive = 35  }, -- (neither)
+    { itemId = 12818, name = "Byakko's Haidate",   lot = 765,   lotWinner = "You",      winningLot = 765, timeToLive = 250 }, -- Rare+Ex
+    { itemId = 17707, name = "Martial Anelace",    lot = 312,   lotWinner = "Matsuno",  winningLot = 543, timeToLive = 200 }, -- (neither)
+    { itemId = 14488, name = "Homam Corazza",      lot = 65535, lotWinner = "",         winningLot = 0,   timeToLive = 270 }, -- Rare+Ex
+    -- Usables (type 7)
+    { itemId = 4247,  name = "Miratete's Memoirs", lot = 0,     lotWinner = "",         winningLot = 0,   timeToLive = 200 }, -- Rare+Ex
+    -- Items catch-all (type 1)
+    { itemId = 1127,  name = "Kindred's Seal",     lot = 0,     lotWinner = "Fahad",    winningLot = 789, timeToLive = 180 }, -- Ex only
+    -- General item
+    { itemId = 606,   name = "Quadav Fetich Head", lot = 0,     lotWinner = "",         winningLot = 0,   timeToLive = 150 }, -- Rare
 }
 
 ------------------------------------------------------------
@@ -254,6 +253,11 @@ local function gatherTreasureData()
                 winnerName = 'Unknown'
             end
 
+            -- DropTime is the server Unix timestamp when the item entered the pool.
+            -- TimeToLive is in an unknown unit (not seconds), so derive expiry from DropTime.
+            local dropRem  = item.DropTime + 300 - os.time()
+            local expiresAt = (dropRem >= 0 and dropRem <= 310) and (item.DropTime + 300) or (os.time() + 300)
+
             result[#result + 1] = {
                 slot       = i,
                 itemId     = item.ItemId,
@@ -261,7 +265,7 @@ local function gatherTreasureData()
                 lot        = item.Lot,
                 winningLot = item.WinningLot,
                 winnerName = winnerName,
-                expiresAt  = os.time() + item.TimeToLive,  -- TimeToLive is remaining seconds, not a server-epoch timestamp
+                expiresAt  = expiresAt,
                 playerName = playerName,
                 partyLots  = buildPartyLotsForSlot(i),
             }
@@ -674,11 +678,11 @@ local function drawLotDetailsWindow(items)
     end
 
     local rowH   = imgui.GetTextLineHeightWithSpacing()
-    local scrollH = rowH * 8
 
-    imgui.SetNextWindowSize({ 220, 0 }, ImGuiCond_Always)
+    imgui.SetNextWindowSizeConstraints({ 220, 80 }, { 220, 2000 })
+    imgui.SetNextWindowSize({ 220, rowH * 12 }, ImGuiCond_FirstUseEver or 4)
     imgui.PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0)
-    if imgui.Begin('Lot Details##lotdetails', lotDetailsOpen, ImGuiWindowFlags_NoResize) then
+    if imgui.Begin('Lot Details##lotdetails', lotDetailsOpen) then
         imgui.TextColored({ 1.0, 0.85, 0.2, 1.0 }, entry.name)
         imgui.Separator()
         imgui.Spacing()
@@ -686,7 +690,7 @@ local function drawLotDetailsWindow(items)
         if not hasAny then
             imgui.TextDisabled('No party members found.')
         else
-            imguiBeginChild('##lotscroll', { 0, scrollH }, false)
+            imguiBeginChild('##lotscroll', { 0, 0 }, false)
             local first = true
             for i = 1, 3 do
                 if #parties[i] > 0 then
