@@ -679,8 +679,8 @@ local function drawLotDetailsWindow(items)
 
     local rowH   = imgui.GetTextLineHeightWithSpacing()
 
-    imgui.SetNextWindowSizeConstraints({ 220, 80 }, { 220, 2000 })
-    imgui.SetNextWindowSize({ 220, rowH * 12 }, ImGuiCond_FirstUseEver or 4)
+    imgui.SetNextWindowSizeConstraints({ 200, 80 }, { 200, 2000 })
+    imgui.SetNextWindowSize({ 200, rowH * 12 }, ImGuiCond_FirstUseEver or 4)
     imgui.PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0)
     if imgui.Begin('Lot Details##lotdetails', lotDetailsOpen) then
         imgui.TextColored({ 1.0, 0.85, 0.2, 1.0 }, entry.name)
