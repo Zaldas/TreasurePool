@@ -892,6 +892,13 @@ ashita.events.register('packet_in', 'treasurepool_packet_in', function(e)
 
     if e.injected then return end
 
+    -- 0x000B: zone leave / warp — clear stale pool immediately
+    if e.id == 0x000B then
+        cachedItems = {}
+        state.reset()
+        return
+    end
+
     -- 0x00D2: item added/updated or removed from pool slot
     if e.id == 0x00D2 then
         local packet = ffi.cast('tp_packet_trophylist_s2c_t*', e.data_modified_raw)
