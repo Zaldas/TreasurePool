@@ -650,18 +650,20 @@ local function drawLotDetailsWindow(items)
         end
     end
 
-    -- Actioned members no longer in the party go at the end of the main party column
-    local extras = {}
-    for name in pairs(entry.partyLots or {}) do
-        if not seenNames[name] then extras[#extras + 1] = name end
-    end
-    table.sort(extras)
-    for _, name in ipairs(extras) do
-        local lot = entry.partyLots[name]
-        parties[1][#parties[1] + 1] = buildLotRow(name, lot, entry.winningLot)
+    -- Lotters not in the current alliance go in their own section (e.g. Dynamis cross-alliance lots)
+    local extraRows = {}
+    do
+        local extraNames = {}
+        for name in pairs(entry.partyLots or {}) do
+            if not seenNames[name] then extraNames[#extraNames + 1] = name end
+        end
+        table.sort(extraNames)
+        for _, name in ipairs(extraNames) do
+            extraRows[#extraRows + 1] = buildLotRow(name, entry.partyLots[name], entry.winningLot)
+        end
     end
 
-    local hasAny = #parties[1] > 0 or #parties[2] > 0 or #parties[3] > 0
+    local hasAny = #parties[1] > 0 or #parties[2] > 0 or #parties[3] > 0 or #extraRows > 0
 
     local statusColW = 60
     local gap        = 8
@@ -702,6 +704,14 @@ local function drawLotDetailsWindow(items)
                     renderRows(parties[i])
                     first = false
                 end
+            end
+            if #extraRows > 0 then
+                if not first then
+                    imgui.Spacing()
+                    imgui.Separator()
+                    imgui.Spacing()
+                end
+                renderRows(extraRows)
             end
             imgui.EndChild()
         end
@@ -865,6 +875,30 @@ ashita.events.register('d3d_present', 'present_cb', function()
     for i = #cachedItems, 1, -1 do
         if cachedItems[i].expiresAt < now - 30 then
             table.remove(cachedItems, i)
+        end
+    end
+
+    -- Clear stale winner when they've left the zone.
+    -- Server retracts lots on zone-out but sends no packet; GetMemberIsActive
+    -- returns 0 for out-of-zone members, which is the only reliable signal we have.
+    if not settingsOpen[1] and #cachedItems > 0 then
+        local partyMem = AshitaCore:GetMemoryManager():GetParty()
+        if partyMem then
+            local inZone = {}
+            for i = 0, 17 do
+                if partyMem:GetMemberIsActive(i) ~= 0 then
+                    local n = partyMem:GetMemberName(i)
+                    if type(n) == 'string' and #n >= 3 then
+                        inZone[n] = true
+                    end
+                end
+            end
+            for _, entry in ipairs(cachedItems) do
+                if entry.winnerName ~= '' and not inZone[entry.winnerName] then
+                    entry.winningLot = 0
+                    entry.winnerName = ''
+                end
+            end
         end
     end
 
