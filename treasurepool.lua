@@ -48,7 +48,7 @@ local default_settings = T{
         y = 200,
     },
     showLotButtons    = true,
-    dragEnabled       = true,
+    lockPosition      = false,
     scale             = 0,    -- 0 = auto (resY/1440); >0 = custom multiplier (0.25-2.5)
     debugCount        = 10,
     theme             = 'Plain',
@@ -89,7 +89,7 @@ local THEME_LIST = buildThemeList()
 ------------------------------------------------------------
 -- Addon State
 ------------------------------------------------------------
-local tpSettings       = nil
+local tpSettings       = default_settings
 local settingsOpen     = { false }
 local cachedItems      = {}
 local lotDetailsSlot   = nil
@@ -346,7 +346,7 @@ end
 local function rebuildWindow()
     lootWindow.destroy()
     lootWindow.initialize(layout, getActiveBgDef(), tpSettings.anchor, getEffectiveScale())
-    lootWindow.dragEnabled = tpSettings.dragEnabled
+    lootWindow.dragEnabled = tpSettings.lockPosition ~= true
     wireCallbacks()
 end
 
@@ -365,7 +365,7 @@ ashita.events.register('load', 'load_cb', function()
     tpSettings = settings.load(default_settings)
 
     lootWindow.initialize(layout, getActiveBgDef(), tpSettings.anchor, getEffectiveScale())
-    lootWindow.dragEnabled = tpSettings.dragEnabled
+    lootWindow.dragEnabled = tpSettings.lockPosition ~= true
     wireCallbacks()
 
     -- Prime cache in case addon loads while items are already in the pool
@@ -451,7 +451,7 @@ local function drawSettingsWindow()
                 for i, t in ipairs(THEME_LIST) do
                     if t == (tpSettings.theme or 'Plain') then themeIdx[1] = i - 1; break end
                 end
-                imgui.SetNextItemWidth(availW - indent)
+                imgui.SetNextItemWidth(math.floor((availW - indent) * 0.65))
                 if imgui.Combo('Theme##theme', themeIdx, table.concat(THEME_LIST, '\0') .. '\0') then
                     tpSettings.theme = THEME_LIST[themeIdx[1] + 1]
                     settings.save()
@@ -460,10 +460,10 @@ local function drawSettingsWindow()
                 imgui.Spacing()
 
                 imgui.SetCursorPosX(imgui.GetCursorPosX() + indent)
-                local drag = { tpSettings.dragEnabled }
-                if imgui.Checkbox('Drag Enabled', drag) then
-                    tpSettings.dragEnabled = drag[1]
-                    lootWindow.dragEnabled = drag[1]
+                local lockPos = { tpSettings.lockPosition == true }
+                if imgui.Checkbox('Lock position', lockPos) then
+                    tpSettings.lockPosition = lockPos[1]
+                    lootWindow.dragEnabled = not lockPos[1]
                     settings.save()
                 end
 
@@ -502,7 +502,10 @@ local function drawSettingsWindow()
                 imgui.Separator()
                 imgui.Spacing()
 
-                if styledButton('Reload Layout', availW, false) then
+                local btnW   = math.floor(availW * 0.80)
+                local btnPad = math.floor((availW - btnW) * 0.5)
+                imgui.SetCursorPosX(imgui.GetCursorPosX() + btnPad)
+                if styledButton('Reload Layout', btnW, false) then
                     reloadLayout()
                 end
 
