@@ -165,7 +165,7 @@ local function playerOwnsRareItem(itemId, inv)
     for _, container in ipairs(OWNED_CONTAINERS) do
         local max = inv:GetContainerCountMax(container)
         for slot = 0, max - 1 do
-            local item = inv:GetItem(container, slot)
+            local item = inv:GetContainerItem(container, slot)
             if item and item.Id == itemId then return true end
         end
     end
