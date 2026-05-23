@@ -259,7 +259,7 @@ function lootWindow.initialize(layoutRef, bgDef, anchorRef, scale)
     lastCount = -1
 end
 
-function lootWindow.update(items)
+function lootWindow.update(items, lotAllActive, passAllActive)
     if not engine then return end
 
     local n = #items
@@ -298,25 +298,26 @@ function lootWindow.update(items)
     end
 
     -- Update each item
-    local hasUnlotted   = false
-    local hasActionable = false
+    local hasPending = false
     for i, item in ipairs(lootItems) do
         if items[i] then
             item:update(items[i], hoveredIdx == i)
-            if items[i].lot == 0        then hasUnlotted   = true end
-            if items[i].lot ~= 65535    then hasActionable = true end
+            if items[i].lot == 0 then hasPending = true end
         end
     end
 
-    -- Footer button visibility: Lot All only for unlotted; Pass All for anything not yet passed
-    if hasUnlotted then
-        lotAllBtn:show(utils.VIS_TOKEN)
-    else
-        lotAllBtn:hide(utils.VIS_TOKEN)
-    end
-    if hasActionable then
+    -- Footer buttons: visible while there are un-actioned items.
+    -- Pass All is dominant: while it drains, Lot All is locked out.
+    -- Lot All draining keeps Pass All visible so the user can still bail/interrupt.
+    if hasPending then
+        if passAllActive then
+            lotAllBtn:hide(utils.VIS_TOKEN)
+        else
+            lotAllBtn:show(utils.VIS_TOKEN)
+        end
         passAllBtn:show(utils.VIS_TOKEN)
     else
+        lotAllBtn:hide(utils.VIS_TOKEN)
         passAllBtn:hide(utils.VIS_TOKEN)
     end
 

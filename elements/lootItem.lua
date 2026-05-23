@@ -128,6 +128,12 @@ function lootItem:update(entry, isHovered)
     if entry == nil then return end
 
     self.nameText:update(entry.name)
+    local isRareOwned = entry.rareOwned and entry.lot == 0
+    if isRareOwned then
+        self.nameText:color({ r = 195, g = 85, b = 85, a = 255 })
+    else
+        self.nameText:color({ r = 232, g = 232, b = 232, a = 255 })
+    end
 
     -- Resource item (used for icon bitmap, Rare/Ex flags)
     local resItem = entry.itemId and entry.itemId > 0
@@ -204,7 +210,9 @@ function lootItem:update(entry, isHovered)
     local statusStr = '---'
     local playerName = entry.playerName or 'You'
     if isHovered then
-        if entry.lot == 65535 then
+        if entry.rareOwned and entry.lot == 0 then
+            statusStr = 'Owned'
+        elseif entry.lot == 65535 then
             statusStr = 'Passed'
         elseif entry.lot > 0 then
             statusStr = formatLot(entry.lot) .. ': ' .. playerName
@@ -220,9 +228,13 @@ function lootItem:update(entry, isHovered)
     self.statusText:color(statusColor)
 
     local canAct = private[self].buttonsEnabled and isHovered
-    if canAct and entry.lot == 0 then
+    if canAct and entry.lot == 0 and not entry.rareOwned then
         -- No action yet: both buttons available
         self.lotBtn:show(utils.VIS_TOKEN)
+        self.passBtn:show(utils.VIS_TOKEN)
+    elseif canAct and entry.lot == 0 and entry.rareOwned then
+        -- Rare item already owned: pass available, lot suppressed
+        self.lotBtn:hide(utils.VIS_TOKEN)
         self.passBtn:show(utils.VIS_TOKEN)
     elseif canAct and entry.lot ~= 65535 then
         -- Already lotted: can still pass, cannot re-lot

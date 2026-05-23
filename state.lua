@@ -148,16 +148,16 @@ function state.drainQueues(sendLot, sendPass)
     if #lotAllQueue > 0 then
         local s = table.remove(lotAllQueue, 1)
         if sendLot then sendLot(s) end
-    end
-    if #passAllQueue > 0 then
+    elseif #passAllQueue > 0 then
         local s = table.remove(passAllQueue, 1)
         if sendPass then sendPass(s) end
     end
 end
 
--- Fills lotAllQueue with slots where lot == 0
+-- Fills lotAllQueue with slots where lot == 0; cancels any pending pass-all.
 function state.addLotAll(items)
-    lotAllQueue = {}
+    passAllQueue = {}
+    lotAllQueue  = {}
     for _, entry in ipairs(items) do
         if entry.lot == 0 then
             lotAllQueue[#lotAllQueue + 1] = entry.slot
@@ -165,14 +165,23 @@ function state.addLotAll(items)
     end
 end
 
--- Fills passAllQueue with slots where lot == 0
+-- Fills passAllQueue with slots where lot == 0; cancels any pending lot-all.
 function state.addPassAll(items)
+    lotAllQueue  = {}
     passAllQueue = {}
     for _, entry in ipairs(items) do
         if entry.lot == 0 then
             passAllQueue[#passAllQueue + 1] = entry.slot
         end
     end
+end
+
+function state.isLotAllActive()
+    return #lotAllQueue > 0
+end
+
+function state.isPassAllActive()
+    return #passAllQueue > 0
 end
 
 function state.reset()

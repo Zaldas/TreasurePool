@@ -94,6 +94,8 @@ local settingsOpen     = { false }
 local cachedItems      = {}
 local lotDetailsSlot   = nil
 local lotDetailsOpen   = { false }
+local rareOwnedCache   = {}
+local rareOwnedFrame   = 0
 
 ------------------------------------------------------------
 -- Cache helpers (packet-driven insertion sort)
@@ -150,6 +152,26 @@ local function buildPartyLotsForSlot(slotIdx)
     return result
 end
 
+local function isInventoryFull()
+    local inv = AshitaCore:GetMemoryManager():GetInventory()
+    if not inv then return false end
+    return inv:GetContainerCount(0) >= inv:GetContainerCountMax(0)
+end
+
+-- All personal storage containers; excludes Temporary (3) and Recycle (17).
+local OWNED_CONTAINERS = { 0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 }
+
+local function playerOwnsRareItem(itemId, inv)
+    for _, container in ipairs(OWNED_CONTAINERS) do
+        local max = inv:GetContainerCountMax(container)
+        for slot = 0, max - 1 do
+            local item = inv:GetItem(container, slot)
+            if item and item.Id == itemId then return true end
+        end
+    end
+    return false
+end
+
 local function buildItemFromPacket(packet)
     local itemId   = packet.TrophyItemNo
     local slotIdx  = packet.TrophyItemIndex
@@ -197,7 +219,7 @@ local dPartyLots = {
 local dTreasurePool = {
     -- Gear (Weapon/Armor — type 4/5)
     { itemId = 17440, name = "Kraken Club",        lot = 0,     lotWinner = "",         winningLot = 0,   timeToLive = 280 }, -- Rare
-    { itemId = 12562, name = "Kirin's Osode",      lot = 0,     lotWinner = "Matsuno",  winningLot = 543, timeToLive = 220 }, -- Rare
+    { itemId = 12562, name = "Kirin's Osode",      lot = 0,     lotWinner = "Matsuno",  winningLot = 543, timeToLive = 220, rareOwned = true }, -- Rare (debug: simulated owned)
     { itemId = 18425, name = "Perdu Blade",        lot = 0,     lotWinner = "Jorin",    winningLot = 821, timeToLive = 90  }, -- Rare+Ex
     { itemId = 17707, name = "Martial Anelace",    lot = 0,     lotWinner = "Beatrice", winningLot = 412, timeToLive = 35  }, -- (neither)
     { itemId = 12818, name = "Byakko's Haidate",   lot = 765,   lotWinner = "You",      winningLot = 765, timeToLive = 250 }, -- Rare+Ex
@@ -290,6 +312,7 @@ local function gatherDebugData()
             expiresAt  = os.time() + item.timeToLive,
             playerName = playerName,
             partyLots  = dPartyLots,
+            rareOwned  = item.rareOwned or false,
         }
     end
     return result
@@ -302,9 +325,21 @@ local function wireCallbacks()
     lootWindow.onLotSlot = function(slot)
         if settingsOpen[1] then
             print(chat.header('TreasurePool') .. chat.message('Debug: Lot slot ' .. tostring(slot)))
-        else
-            sendLotPacket(slot)
+            return
         end
+
+        -- Live rare check at lot time: rareOwnedCache may be stale in the first 30 frames after an item appears.
+        local inv = AshitaCore:GetMemoryManager():GetInventory()
+        for _, entry in ipairs(gatherTreasureData()) do
+            if entry.slot == slot then
+                local resource = AshitaCore:GetResourceManager():GetItemById(entry.itemId)
+                local isRare   = resource and bit.band(resource.Flags, 0x8000) ~= 0
+                if isRare and inv and playerOwnsRareItem(entry.itemId, inv) then return end
+                break
+            end
+        end
+
+        sendLotPacket(slot)
     end
 
     lootWindow.onPassSlot = function(slot)
@@ -316,11 +351,32 @@ local function wireCallbacks()
     end
 
     lootWindow.onLotAll = function()
-        local items = settingsOpen[1] and gatherDebugData() or gatherTreasureData()
-        state.addLotAll(items)
         if settingsOpen[1] then
+            state.addLotAll(gatherDebugData())
             print(chat.header('TreasurePool') .. chat.message('Debug: Lot All queued'))
+            return
         end
+
+        if isInventoryFull() then
+            print(chat.header('TreasurePool') .. chat.warning('Inventory full - cannot lot.'))
+            return
+        end
+
+        local inv      = AshitaCore:GetMemoryManager():GetInventory()
+        local resMgr   = AshitaCore:GetResourceManager()
+        local items    = gatherTreasureData()
+        local lottable = {}
+
+        for _, entry in ipairs(items) do
+            if entry.lot ~= 0 then goto continue end
+            local resource = resMgr:GetItemById(entry.itemId)
+            local isRare   = resource and bit.band(resource.Flags, 0x8000) ~= 0
+            if isRare and inv and playerOwnsRareItem(entry.itemId, inv) then goto continue end
+            lottable[#lottable + 1] = entry
+            ::continue::
+        end
+
+        state.addLotAll(lottable)
     end
 
     lootWindow.onPassAll = function()
@@ -907,7 +963,42 @@ ashita.events.register('d3d_present', 'present_cb', function()
 
     -- Debug mode re-generates fake data each frame (responds to debugCount changes)
     local items = settingsOpen[1] and gatherDebugData() or cachedItems
-    lootWindow.update(items)
+
+    -- Refresh Rare ownership cache every 30 frames; apply cached values every frame.
+    -- Stays at frame 0 until inventory is confirmed loaded (GetContainerCountMax > 0).
+    if not settingsOpen[1] then
+        if rareOwnedFrame == 0 then
+            local inv = AshitaCore:GetMemoryManager():GetInventory()
+            if inv and inv:GetContainerCountMax(0) > 0 then
+                local resMgr = AshitaCore:GetResourceManager()
+                rareOwnedCache = {}
+                for _, entry in ipairs(items) do
+                    if entry.lot == 0 and rareOwnedCache[entry.itemId] == nil then
+                        local resource = resMgr:GetItemById(entry.itemId)
+                        local isRare   = resource and bit.band(resource.Flags, 0x8000) ~= 0
+                        if isRare then
+                            rareOwnedCache[entry.itemId] = playerOwnsRareItem(entry.itemId, inv)
+                        else
+                            rareOwnedCache[entry.itemId] = false
+                        end
+                    end
+                end
+                rareOwnedFrame = 1
+            end
+        else
+            rareOwnedFrame = (rareOwnedFrame + 1) % 30
+        end
+
+        for _, entry in ipairs(items) do
+            if entry.lot == 0 then
+                entry.rareOwned = rareOwnedCache[entry.itemId] or false
+            else
+                entry.rareOwned = false
+            end
+        end
+    end
+
+    lootWindow.update(items, state.isLotAllActive(), state.isPassAllActive())
     drawItemTooltip(items)
     drawLotDetailsWindow(items)
 end)
@@ -931,7 +1022,9 @@ ashita.events.register('packet_in', 'treasurepool_packet_in', function(e)
 
     -- 0x000B: zone leave / warp — clear stale pool immediately
     if e.id == 0x000B then
-        cachedItems = {}
+        cachedItems    = {}
+        rareOwnedCache = {}
+        rareOwnedFrame = 0
         state.reset()
         return
     end
