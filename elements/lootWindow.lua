@@ -56,6 +56,7 @@ lootWindow.onPassAll      = nil
 lootWindow.onItemClick    = nil
 lootWindow.onCollapseToggle = nil
 lootWindow.dragEnabled    = true
+lootWindow.lotAllEnabled  = true   -- set false to hide Lot All (e.g. HXI builds)
 
 ------------------------------------------------------------
 -- Local helpers
@@ -385,7 +386,7 @@ function lootWindow.update(items, lotAllActive, passAllActive)
     -- Pass All is dominant: while it drains, Lot All is locked out.
     -- Lot All draining keeps Pass All visible so the user can still bail/interrupt.
     if hasPending then
-        if passAllActive then
+        if passAllActive or not lootWindow.lotAllEnabled then
             lotAllBtn:hide(utils.VIS_TOKEN)
         else
             lotAllBtn:show(utils.VIS_TOKEN)

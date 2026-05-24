@@ -1,0 +1,48 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create release zips
+        run: |
+          mkdir -p release release-hxi
+
+          # --- Normal build ---
+          git archive HEAD --prefix=TreasurePool/ | tar -xC release/
+          cd release && zip -r TreasurePool.zip TreasurePool && cd ..
+
+          # --- HXI build (Lot All disabled) ---
+          git archive HEAD --prefix=TreasurePool/ | tar -xC release-hxi/
+          sed -i 's/lootWindow\.lotAllEnabled  = true/lootWindow.lotAllEnabled  = false/' \
+            release-hxi/TreasurePool/elements/lootWindow.lua
+          cd release-hxi && zip -r ../release/TreasurePool-HXI.zip TreasurePool && cd ..
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: TreasurePool ${{ steps.version.outputs.VERSION }}
+          files: |
+            release/TreasurePool.zip
+            release/TreasurePool-HXI.zip
+          generate_release_notes: true
+          draft: true
+          fail_on_unmatched_files: true
