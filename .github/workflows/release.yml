@@ -36,6 +36,10 @@ jobs:
             release-hxi/TreasurePool/elements/lootWindow.lua
           cd release-hxi && zip -r ../release/TreasurePool-HXI.zip TreasurePool && cd ..
 
+          # --- Fonts (install to Ashita/addons root alongside the addon folder) ---
+          cp ".github/fonts/Grammara.ttf" release/
+          cp ".github/fonts/Penumbra Serif Std.otf" release/
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -43,6 +47,8 @@ jobs:
           files: |
             release/TreasurePool.zip
             release/TreasurePool-HXI.zip
+            release/Grammara.ttf
+            release/Penumbra Serif Std.otf
           generate_release_notes: true
           draft: true
           fail_on_unmatched_files: true
