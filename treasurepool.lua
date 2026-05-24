@@ -49,6 +49,8 @@ local default_settings = T{
     },
     showLotButtons    = true,
     lockPosition      = false,
+    collapsible       = true,
+    collapsed         = false,
     scale             = 0,    -- 0 = auto (resY/1440); >0 = custom multiplier (0.25-2.5)
     debugCount        = 10,
     theme             = 'Plain',
@@ -393,6 +395,11 @@ local function wireCallbacks()
         lotDetailsSlot = slot
         lotDetailsOpen[1] = true
     end
+
+    lootWindow.onCollapseToggle = function(collapsed)
+        tpSettings.collapsed = collapsed
+        settings.save()
+    end
 end
 
 local function getActiveBgDef()
@@ -404,6 +411,9 @@ local function rebuildWindow()
     lootWindow.initialize(layout, getActiveBgDef(), tpSettings.anchor, getEffectiveScale())
     lootWindow.dragEnabled = tpSettings.lockPosition ~= true
     wireCallbacks()
+    local isCollapsible = tpSettings.collapsible == true
+    lootWindow.setCollapsible(isCollapsible)
+    lootWindow.setCollapsed(isCollapsible and tpSettings.collapsed == true)
 end
 
 local function reloadLayout()
@@ -423,6 +433,9 @@ ashita.events.register('load', 'load_cb', function()
     lootWindow.initialize(layout, getActiveBgDef(), tpSettings.anchor, getEffectiveScale())
     lootWindow.dragEnabled = tpSettings.lockPosition ~= true
     wireCallbacks()
+    local isCollapsible = tpSettings.collapsible == true
+    lootWindow.setCollapsible(isCollapsible)
+    lootWindow.setCollapsed(isCollapsible and tpSettings.collapsed == true)
 
     -- Prime cache in case addon loads while items are already in the pool
     cachedItems = gatherTreasureData()
@@ -521,6 +534,15 @@ local function drawSettingsWindow()
                     tpSettings.lockPosition = lockPos[1]
                     lootWindow.dragEnabled = not lockPos[1]
                     settings.save()
+                end
+
+                imgui.SetCursorPosX(imgui.GetCursorPosX() + indent)
+                local collapsibleOn = { tpSettings.collapsible == true }
+                if imgui.Checkbox('Collapsible header', collapsibleOn) then
+                    tpSettings.collapsible = collapsibleOn[1]
+                    if not collapsibleOn[1] then tpSettings.collapsed = false end
+                    settings.save()
+                    lootWindow.setCollapsible(collapsibleOn[1])
                 end
 
                 imgui.SetCursorPosX(imgui.GetCursorPosX() + indent)

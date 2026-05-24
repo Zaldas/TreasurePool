@@ -47,6 +47,14 @@ local layout = {
         pos       = { WINDOW_W / 2, 2 },
     },
 
+    collapseArrow = {
+        upPath   = 'layouts/assets/upArrow.png',
+        downPath = 'layouts/assets/downArrow.png',
+        size     = { 18, 18 },
+        pos      = { 272, 4 },
+        color    = '#9FC8F2FF',
+    },
+
     lootItem = {
         nameText = {
             font        = 'Tahoma',

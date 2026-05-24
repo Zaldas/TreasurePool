@@ -27,6 +27,10 @@ local bgBorderSize  = 21
 local bgBorderOffset = 1
 local bgPad         = { left = 0, right = 0, top = 0, bottom = 0 }
 local titleText   = nil
+local arrowUp     = nil         -- uiImage: shown when collapsible + expanded (click → collapse)
+local arrowDown   = nil         -- uiImage: shown when collapsible + collapsed (click → expand)
+local isCollapsible = false
+local isCollapsed   = false
 local lotAllBtn   = nil
 local passAllBtn  = nil
 local lootItems   = {}
@@ -41,17 +45,46 @@ local layout      = nil
 local anchor      = nil
 local uiScale     = 1
 
+-- VIS_COLLAPSE (4): hides rows + footer when collapsed; independent of VIS_TOKEN (2)
+local VIS_COLLAPSE = 4
+
 -- Callbacks (set by treasurepool.lua)
-lootWindow.onLotSlot  = nil
-lootWindow.onPassSlot = nil
-lootWindow.onLotAll   = nil
-lootWindow.onPassAll  = nil
-lootWindow.onItemClick = nil
-lootWindow.dragEnabled = true
+lootWindow.onLotSlot      = nil
+lootWindow.onPassSlot     = nil
+lootWindow.onLotAll       = nil
+lootWindow.onPassAll      = nil
+lootWindow.onItemClick    = nil
+lootWindow.onCollapseToggle = nil
+lootWindow.dragEnabled    = true
 
 ------------------------------------------------------------
 -- Local helpers
 ------------------------------------------------------------
+local function updateArrowVisibility()
+    if not arrowUp or not arrowDown then return end
+    if isCollapsible then
+        if isCollapsed then
+            arrowUp:hide(utils.VIS_TOKEN)
+            arrowDown:show(utils.VIS_TOKEN)
+        else
+            arrowUp:show(utils.VIS_TOKEN)
+            arrowDown:hide(utils.VIS_TOKEN)
+        end
+    else
+        arrowUp:hide(utils.VIS_TOKEN)
+        arrowDown:hide(utils.VIS_TOKEN)
+    end
+end
+
+local function hitTestArrow(mx, my)
+    if not isCollapsible or not arrowUp then return false end
+    local ax = arrowUp.absolutePos.x
+    local ay = arrowUp.absolutePos.y
+    local aw = arrowUp.absoluteWidth
+    local ah = arrowUp.absoluteHeight
+    return mx >= ax and mx < ax + aw and my >= ay and my < ay + ah
+end
+
 local function makeLotCallback(item)
     return function()
         local slot = item:getSlot()
@@ -104,7 +137,7 @@ local function relayout(count)
     local R_H = layout.window.rowH
     local F_H = layout.window.footerH
     local PAD = layout.window.pad
-    local totalH = H_H + count * R_H + F_H
+    local totalH = isCollapsed and H_H or (H_H + count * R_H + F_H)
 
     if bgMode == '3slice' then
         windowBg:setHeight(totalH + bgPad.top + bgPad.bottom)
@@ -120,12 +153,21 @@ local function relayout(count)
     titleText.posY = layout.title.pos[2] or 2
     titleText:layoutElement()
 
-    -- Rows
+    -- Collapse arrow (same screen position for both up/down images)
+    if arrowUp and layout.collapseArrow then
+        local ar  = layout.collapseArrow
+        local arX = ar.pos[1]
+        local arY = ar.pos[2]
+        arrowUp.posX  = arX;  arrowUp.posY  = arY;  arrowUp:layoutElement()
+        arrowDown.posX = arX; arrowDown.posY = arY; arrowDown:layoutElement()
+    end
+
+    -- Rows (always positioned for expand; hidden via VIS_COLLAPSE when collapsed)
     for i, item in ipairs(lootItems) do
         item:setPosition(0, H_H + (i - 1) * R_H)
     end
 
-    -- Footer buttons
+    -- Footer buttons (always positioned; hidden via VIS_COLLAPSE when collapsed)
     local BTN_H   = layout.footer.passAllBtn.size[2]
     local BTN_GAP = 4
     local footerY  = H_H + count * R_H + math.floor((F_H - BTN_H) / 2)
@@ -161,7 +203,13 @@ local function hitTestWindow(mx, my)
     local ay = root.absolutePos.y
     local W  = layout.window.width * root.absoluteScale.x
     local n  = lastCount > 0 and lastCount or 0
-    local H  = (layout.window.headerH + n * layout.window.rowH + layout.window.footerH) * root.absoluteScale.y
+    local totalH
+    if isCollapsed then
+        totalH = layout.window.headerH
+    else
+        totalH = layout.window.headerH + n * layout.window.rowH + layout.window.footerH
+    end
+    local H = totalH * root.absoluteScale.y
     return mx >= ax and mx < ax + W and my >= ay and my < ay + H
 end
 
@@ -240,6 +288,32 @@ function lootWindow.initialize(layoutRef, bgDef, anchorRef, scale)
     titleText = uiText.new(layout.title)
     root:addChild(titleText)
 
+    -- Collapse arrows (hidden until setCollapsible(true) is called)
+    arrowUp   = nil
+    arrowDown = nil
+    if layout.collapseArrow then
+        local ar = layout.collapseArrow
+        local arDef = {
+            size  = ar.size,
+            pos   = { 0, 0 },  -- positioned in relayout
+            color = ar.color or '#FFFFFFFF',
+        }
+        arDef.path = ar.upPath
+        arrowUp = uiImage.new(arDef, engine)
+        root:addChild(arrowUp)
+        arrowUp:hide(utils.VIS_TOKEN)
+
+        arDef = {
+            size  = ar.size,
+            pos   = { 0, 0 },
+            color = ar.color or '#FFFFFFFF',
+            path  = ar.downPath,
+        }
+        arrowDown = uiImage.new(arDef, engine)
+        root:addChild(arrowDown)
+        arrowDown:hide(utils.VIS_TOKEN)
+    end
+
     -- Footer buttons (positions set in relayout)
     lotAllBtn  = uiButton.new(layout.footer.lotAllBtn, engine)
     passAllBtn = uiButton.new(layout.footer.passAllBtn, engine)
@@ -250,6 +324,7 @@ function lootWindow.initialize(layoutRef, bgDef, anchorRef, scale)
 
     -- Create all primitives
     root:createPrimitives()
+    root:hide(utils.VIS_TOKEN)  -- prevent flash before first update(); shown when n > 0
 
     titleText:update('Treasure Pool')
     lotAllBtn:setText('Lot All')
@@ -321,6 +396,21 @@ function lootWindow.update(items, lotAllActive, passAllActive)
         passAllBtn:hide(utils.VIS_TOKEN)
     end
 
+    -- Collapsed: hide all rows and footer buttons regardless of hasPending
+    if isCollapsed then
+        for _, item in ipairs(lootItems) do
+            item:hide(VIS_COLLAPSE)
+        end
+        lotAllBtn:hide(VIS_COLLAPSE)
+        passAllBtn:hide(VIS_COLLAPSE)
+    else
+        for _, item in ipairs(lootItems) do
+            item:show(VIS_COLLAPSE)
+        end
+        lotAllBtn:show(VIS_COLLAPSE)
+        passAllBtn:show(VIS_COLLAPSE)
+    end
+
     -- Update button hover states every frame
     lotAllBtn:setHover(lotAllBtn.absoluteVisibility and lotAllBtn:hitTest(mouseX, mouseY))
     passAllBtn:setHover(passAllBtn.absoluteVisibility and passAllBtn:hitTest(mouseX, mouseY))
@@ -376,6 +466,25 @@ function lootWindow.handleMouse(e)
             return false
         end
         e.blocked = true
+
+        -- Arrow click: toggle collapse (checked before drag so it takes priority)
+        if hitTestArrow(e.x, e.y) then
+            isCollapsed = not isCollapsed
+            for _, item in ipairs(lootItems) do
+                if isCollapsed then item:hide(VIS_COLLAPSE) else item:show(VIS_COLLAPSE) end
+            end
+            if isCollapsed then
+                lotAllBtn:hide(VIS_COLLAPSE)
+                passAllBtn:hide(VIS_COLLAPSE)
+            else
+                lotAllBtn:show(VIS_COLLAPSE)
+                passAllBtn:show(VIS_COLLAPSE)
+            end
+            updateArrowVisibility()
+            relayout(math.max(lastCount, 0))
+            if lootWindow.onCollapseToggle then lootWindow.onCollapseToggle(isCollapsed) end
+            return false
+        end
 
         if lootWindow.dragEnabled and hitTestHeader(e.x, e.y) then
             isDragging = true
@@ -438,6 +547,42 @@ function lootWindow.handleMouse(e)
     return false
 end
 
+-- Enable or disable the collapsible arrow. Disabling while collapsed auto-expands.
+function lootWindow.setCollapsible(enabled)
+    if not engine then return end
+    enabled = (enabled == true)
+    if isCollapsible == enabled then return end
+    isCollapsible = enabled
+    if not enabled and isCollapsed then
+        isCollapsed = false
+        for _, item in ipairs(lootItems) do item:show(VIS_COLLAPSE) end
+        lotAllBtn:show(VIS_COLLAPSE)
+        passAllBtn:show(VIS_COLLAPSE)
+    end
+    updateArrowVisibility()
+    relayout(math.max(lastCount, 0))
+end
+
+-- Collapse or expand the window.
+function lootWindow.setCollapsed(collapsed)
+    if not engine then return end
+    collapsed = (collapsed == true)
+    if isCollapsed == collapsed then return end
+    isCollapsed = collapsed
+    for _, item in ipairs(lootItems) do
+        if collapsed then item:hide(VIS_COLLAPSE) else item:show(VIS_COLLAPSE) end
+    end
+    if collapsed then
+        lotAllBtn:hide(VIS_COLLAPSE)
+        passAllBtn:hide(VIS_COLLAPSE)
+    else
+        lotAllBtn:show(VIS_COLLAPSE)
+        passAllBtn:show(VIS_COLLAPSE)
+    end
+    updateArrowVisibility()
+    relayout(math.max(lastCount, 0))
+end
+
 function lootWindow.getHoveredEntry(items)
     if hoveredIdx == nil then return nil end
     return items[hoveredIdx]
@@ -460,15 +605,19 @@ function lootWindow.destroy()
         engine:destroy()
         engine = nil
     end
-    lastCount    = -1
-    windowBg     = nil
+    lastCount     = -1
+    isCollapsible = false
+    isCollapsed   = false
+    windowBg      = nil
     windowBorders = nil
-    titleText    = nil
-    lotAllBtn    = nil
-    passAllBtn   = nil
-    hoveredIdx   = nil
-    pressedBtn   = nil
-    isDragging   = false
+    titleText     = nil
+    arrowUp       = nil
+    arrowDown     = nil
+    lotAllBtn     = nil
+    passAllBtn    = nil
+    hoveredIdx    = nil
+    pressedBtn    = nil
+    isDragging    = false
 end
 
 return lootWindow
