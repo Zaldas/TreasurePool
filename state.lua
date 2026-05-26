@@ -75,6 +75,83 @@ local memberLotItemKeys  = {}
 local lotAllQueue        = {}
 local passAllQueue       = {}
 local frameCount         = 0
+local cachedItems        = {}
+
+------------------------------------------------------------
+-- Cache helpers
+------------------------------------------------------------
+function state.insertSorted(item)
+    -- Remove any existing entry for this slot, preserving accumulated partyLots.
+    for i = #cachedItems, 1, -1 do
+        if cachedItems[i].slot == item.slot then
+            item.partyLots = cachedItems[i].partyLots or {}
+            table.remove(cachedItems, i)
+            break
+        end
+    end
+    -- Insert at first position where our expiresAt is greater (descending order).
+    for i = 1, #cachedItems do
+        if item.expiresAt > cachedItems[i].expiresAt then
+            table.insert(cachedItems, i, item)
+            return
+        end
+    end
+    cachedItems[#cachedItems + 1] = item
+end
+
+function state.removeFromCache(slot)
+    for i = 1, #cachedItems do
+        if cachedItems[i].slot == slot then
+            table.remove(cachedItems, i)
+            return
+        end
+    end
+end
+
+------------------------------------------------------------
+-- Cache accessors
+------------------------------------------------------------
+-- Returns the live cachedItems table. Callers may mutate entries in-place
+-- (e.g. rareOwned, winnerName) without needing a copy.
+function state.getItems()
+    return cachedItems
+end
+
+function state.clearItems()
+    cachedItems = {}
+end
+
+-- Replaces cachedItems with the provided table and sorts it descending by
+-- expiresAt. Used only by the load-event prime from gatherTreasureData().
+function state.setItems(items)
+    cachedItems = items
+    table.sort(cachedItems, function(a, b) return a.expiresAt > b.expiresAt end)
+end
+
+-- Removes entries that expired more than 30 seconds ago. Iterates backwards
+-- so removals do not shift unvisited indices.
+function state.pruneExpired(now)
+    for i = #cachedItems, 1, -1 do
+        if cachedItems[i].expiresAt < now - 30 then
+            table.remove(cachedItems, i)
+        end
+    end
+end
+
+------------------------------------------------------------
+-- Lot formatting
+------------------------------------------------------------
+-- Returns a zero-padded 3-character string for display.
+-- nil  -> '---'
+-- 0-9  -> '00X'
+-- 10-99 -> '0XX'
+-- 100+ -> 'XXX'
+function state.formatLot(lot)
+    if lot == nil then return '---' end
+    if lot < 10   then return '00' .. tostring(lot) end
+    if lot < 100  then return '0'  .. tostring(lot) end
+    return tostring(lot)
+end
 
 ------------------------------------------------------------
 -- Packet handling
@@ -82,6 +159,7 @@ local frameCount         = 0
 function state.handlePacketIn(e)
     -- 0x00D2: Trophy List — clear member lots for this slot only when the item changes
     if e.id == 0x00D2 and not e.injected then
+        if e.data_length < ffi.sizeof('tp_packet_trophylist_s2c_t') then return end
         local packet = ffi.cast('tp_packet_trophylist_s2c_t*', e.data_modified_raw)
         local slotIdx = packet.TrophyItemIndex
         if packet.TrophyItemNo == 0 then
@@ -99,6 +177,7 @@ function state.handlePacketIn(e)
 
     -- 0x00D3: Trophy Solution — track member lots, handle inventory full
     if e.id == 0x00D3 and not e.injected then
+        if e.data_length < ffi.sizeof('tp_packet_trophysolution_s2c_t') then return end
         local packet = ffi.cast('tp_packet_trophysolution_s2c_t*', e.data_modified_raw)
         local slotIdx  = packet.TrophyItemIndex
         local judgeFlg = packet.JudgeFlg
@@ -190,6 +269,7 @@ function state.reset()
     lotAllQueue        = {}
     passAllQueue       = {}
     frameCount         = 0
+    cachedItems        = {}
 end
 
 function state.getMemberLots()
