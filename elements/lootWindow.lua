@@ -45,7 +45,11 @@ local layout      = nil
 local anchor      = nil
 local uiScale     = 1
 
--- VIS_COLLAPSE (4): hides rows + footer when collapsed; independent of VIS_TOKEN (2)
+-- TreasurePool-specific visibility flag used to hide rows + footer when the
+-- window is collapsed. Independent of VIS_TOKEN (2). Value (4) must not overlap
+-- with the spui-framework flags defined in libs/spui/utils.lua: VIS_DEFAULT = 1,
+-- VIS_TOKEN = 2, VIS_INIT = 3. Kept local here (not added to utils.lua) because
+-- it is not part of the upstream spui framework.
 local VIS_COLLAPSE = 4
 
 -- Callbacks (set by treasurepool.lua)
