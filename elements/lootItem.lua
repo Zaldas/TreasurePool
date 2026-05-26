@@ -6,17 +6,11 @@ local uiButton    = require('libs/spui/uiButton')
 local uiBar       = require('libs/spui/uiBar')
 local uiImage     = require('libs/spui/uiImage')
 local utils       = require('libs/spui/utils')
+local state       = require('state')
 
 local lootItem = classes.class(uiContainer)
 
 local private = {}
-
-local function formatLot(lot)
-    if lot == nil then return '---' end
-    if lot < 10 then return '00' .. tostring(lot) end
-    if lot < 100 then return '0' .. tostring(lot) end
-    return tostring(lot)
-end
 
 local function formatTimer(remaining)
     if remaining <= 0 then return '0:00' end
@@ -50,6 +44,7 @@ function lootItem:init(engine, layout)
         nameTextX      = layout.nameText and layout.nameText.pos and layout.nameText.pos[1] or 0,
         rareImgDef     = rDef,
         exImgDef       = eDef,
+        lastIconItemId = nil,
     }
 
     self.timerBar = uiBar.new(layout.timerBar, engine, 1.0)
@@ -139,9 +134,16 @@ function lootItem:update(entry, isHovered)
     local resItem = entry.itemId and entry.itemId > 0
         and AshitaCore:GetResourceManager():GetItemById(entry.itemId)
 
-    if resItem and resItem.ImageSize and resItem.ImageSize > 0 then
-        local tex, w, h = private[self].engine:loadImageFromMemory(resItem.Bitmap, resItem.ImageSize, entry.itemId)
-        self.iconImg:setTexture(tex, w, h)
+    -- Icon dirty flag: only reload texture when the item changes. Reset to nil
+    -- on empty slots so the next non-zero itemId on this row triggers a load.
+    if entry.itemId == 0 then
+        private[self].lastIconItemId = nil
+    elseif entry.itemId ~= private[self].lastIconItemId then
+        if resItem and resItem.ImageSize and resItem.ImageSize > 0 then
+            local tex, w, h = private[self].engine:loadImageFromMemory(resItem.Bitmap, resItem.ImageSize, entry.itemId)
+            self.iconImg:setTexture(tex, w, h)
+            private[self].lastIconItemId = entry.itemId
+        end
     end
 
     -- Rare/Ex tag icons: position dynamically after name text
@@ -215,11 +217,11 @@ function lootItem:update(entry, isHovered)
         elseif entry.lot == 65535 then
             statusStr = 'Passed'
         elseif entry.lot > 0 then
-            statusStr = formatLot(entry.lot) .. ': ' .. playerName
+            statusStr = state.formatLot(entry.lot) .. ': ' .. playerName
         end
     else
         if entry.winningLot > 0 and entry.winnerName ~= '' then
-            statusStr = formatLot(entry.winningLot) .. ': ' .. entry.winnerName
+            statusStr = state.formatLot(entry.winningLot) .. ': ' .. entry.winnerName
         elseif entry.lot == 65535 then
             statusStr = 'Passed'
         end
