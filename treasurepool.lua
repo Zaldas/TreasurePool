@@ -420,7 +420,6 @@ end)
 ashita.events.register('unload', 'unload_cb', function()
     lootWindow.destroy()
     state.reset()
-    state.clearItems()
 end)
 
 ------------------------------------------------------------
@@ -999,9 +998,9 @@ end)
 -- Event: Packet In
 ------------------------------------------------------------
 ashita.events.register('packet_in', 'treasurepool_packet_in', function(e)
-    state.handlePacketIn(e)
-
     if e.injected then return end
+
+    state.handlePacketIn(e)
 
     -- 0x000A: zone enter — player is now logged in / zoned in
     if e.id == 0x000A then
@@ -1012,7 +1011,6 @@ ashita.events.register('packet_in', 'treasurepool_packet_in', function(e)
     -- 0x000B: zone leave / warp — clear stale pool immediately
     if e.id == 0x000B then
         logged_in      = false
-        state.clearItems()
         rareOwnedCache = {}
         rareOwnedFrame = 0
         state.reset()

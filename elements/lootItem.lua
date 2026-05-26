@@ -135,14 +135,14 @@ function lootItem:update(entry, isHovered)
         and AshitaCore:GetResourceManager():GetItemById(entry.itemId)
 
     -- Icon dirty flag: only reload texture when the item changes. Reset to nil
-    -- on empty slots so the next non-zero itemId on this row triggers a load.
+    -- when the slot is vacated (itemId == 0) so the next item triggers a load.
     if entry.itemId == 0 then
         private[self].lastIconItemId = nil
     elseif entry.itemId ~= private[self].lastIconItemId then
+        private[self].lastIconItemId = entry.itemId
         if resItem and resItem.ImageSize and resItem.ImageSize > 0 then
             local tex, w, h = private[self].engine:loadImageFromMemory(resItem.Bitmap, resItem.ImageSize, entry.itemId)
             self.iconImg:setTexture(tex, w, h)
-            private[self].lastIconItemId = entry.itemId
         end
     end
 
