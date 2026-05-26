@@ -159,7 +159,7 @@ end
 function state.handlePacketIn(e)
     -- 0x00D2: Trophy List — clear member lots for this slot only when the item changes
     if e.id == 0x00D2 and not e.injected then
-        if e.data_length < ffi.sizeof('tp_packet_trophylist_s2c_t') then return end
+        if e.size < ffi.sizeof('tp_packet_trophylist_s2c_t') then return end
         local packet = ffi.cast('tp_packet_trophylist_s2c_t*', e.data_modified_raw)
         local slotIdx = packet.TrophyItemIndex
         if packet.TrophyItemNo == 0 then
@@ -177,7 +177,7 @@ function state.handlePacketIn(e)
 
     -- 0x00D3: Trophy Solution — track member lots, handle inventory full
     if e.id == 0x00D3 and not e.injected then
-        if e.data_length < ffi.sizeof('tp_packet_trophysolution_s2c_t') then return end
+        if e.size < ffi.sizeof('tp_packet_trophysolution_s2c_t') then return end
         local packet = ffi.cast('tp_packet_trophysolution_s2c_t*', e.data_modified_raw)
         local slotIdx  = packet.TrophyItemIndex
         local judgeFlg = packet.JudgeFlg
