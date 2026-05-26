@@ -93,42 +93,11 @@ local THEME_LIST = buildThemeList()
 ------------------------------------------------------------
 local tpSettings       = default_settings
 local settingsOpen     = { false }
-local cachedItems      = {}
+local logged_in        = false
 local lotDetailsSlot   = nil
 local lotDetailsOpen   = { false }
 local rareOwnedCache   = {}
 local rareOwnedFrame   = 0
-
-------------------------------------------------------------
--- Cache helpers (packet-driven insertion sort)
-------------------------------------------------------------
-local function insertSorted(item)
-    -- Remove any existing entry for this slot, preserving accumulated partyLots
-    for i = #cachedItems, 1, -1 do
-        if cachedItems[i].slot == item.slot then
-            item.partyLots = cachedItems[i].partyLots or {}
-            table.remove(cachedItems, i)
-            break
-        end
-    end
-    -- Insert at first position where our expiresAt is greater (descending)
-    for i = 1, #cachedItems do
-        if item.expiresAt > cachedItems[i].expiresAt then
-            table.insert(cachedItems, i, item)
-            return
-        end
-    end
-    cachedItems[#cachedItems + 1] = item
-end
-
-local function removeFromCache(slot)
-    for i = 1, #cachedItems do
-        if cachedItems[i].slot == slot then
-            table.remove(cachedItems, i)
-            return
-        end
-    end
-end
 
 local function getPlayerName()
     local party = AshitaCore:GetMemoryManager():GetParty()
@@ -193,7 +162,8 @@ local function buildItemFromPacket(packet)
         winnerName = winnerName,
         expiresAt  = os.time() + 300,
         playerName = getPlayerName(),
-        partyLots  = buildPartyLotsForSlot(slotIdx),
+        -- populated by 0x00D3 lot/pass packets as they arrive
+        partyLots  = {},
     }
 end
 
@@ -429,17 +399,12 @@ end
 ------------------------------------------------------------
 ashita.events.register('load', 'load_cb', function()
     tpSettings = settings.load(default_settings)
+    logged_in  = GetPlayerEntity() ~= nil
 
-    lootWindow.initialize(layout, getActiveBgDef(), tpSettings.anchor, getEffectiveScale())
-    lootWindow.dragEnabled = tpSettings.lockPosition ~= true
-    wireCallbacks()
-    local isCollapsible = tpSettings.collapsible == true
-    lootWindow.setCollapsible(isCollapsible)
-    lootWindow.setCollapsed(isCollapsible and tpSettings.collapsed == true)
+    rebuildWindow()
 
     -- Prime cache in case addon loads while items are already in the pool
-    cachedItems = gatherTreasureData()
-    table.sort(cachedItems, function(a, b) return a.expiresAt > b.expiresAt end)
+    state.setItems(gatherTreasureData())
 
     settings.register('settings', 'settings_update', function(s)
         if s ~= nil then
@@ -455,7 +420,7 @@ end)
 ashita.events.register('unload', 'unload_cb', function()
     lootWindow.destroy()
     state.reset()
-    cachedItems = {}
+    state.clearItems()
 end)
 
 ------------------------------------------------------------
@@ -691,7 +656,7 @@ local function buildLotRow(name, lot, winningLot)
         statusStr   = 'Pass'
         statusColor = { 0.4, 0.6, 0.9, 1.0 }
     else
-        statusStr = (lot < 10 and '00' or lot < 100 and '0' or '') .. tostring(lot)
+        statusStr = state.formatLot(lot)
         if lot == winningLot and winningLot > 0 then
             statusColor = { 1.0, 0.80, 0.2, 1.0 }  -- gold: currently winning
         else
@@ -763,7 +728,7 @@ local function drawLotDetailsWindow(items)
     local rowH   = imgui.GetTextLineHeightWithSpacing()
 
     imgui.SetNextWindowSizeConstraints({ 200, 80 }, { 200, 2000 })
-    imgui.SetNextWindowSize({ 200, rowH * 12 }, ImGuiCond_FirstUseEver or 4)
+    imgui.SetNextWindowSize({ 200, rowH * 12 }, ImGuiCond_FirstUseEver)
     imgui.PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0)
     if imgui.Begin('Lot Details##lotdetails', lotDetailsOpen) then
         imgui.TextColored({ 1.0, 0.85, 0.2, 1.0 }, entry.name)
@@ -943,7 +908,7 @@ end
 ashita.events.register('d3d_present', 'present_cb', function()
     drawSettingsWindow()
 
-    if not settings.logged_in and not settingsOpen[1] then
+    if not logged_in and not settingsOpen[1] then
         lootWindow.update({})
         return
     end
@@ -953,16 +918,12 @@ ashita.events.register('d3d_present', 'present_cb', function()
 
     -- Prune items that expired >30s ago (safety net for missed clear packets)
     local now = os.time()
-    for i = #cachedItems, 1, -1 do
-        if cachedItems[i].expiresAt < now - 30 then
-            table.remove(cachedItems, i)
-        end
-    end
+    state.pruneExpired(now)
 
     -- Clear stale winner when they've left the zone.
     -- Server retracts lots on zone-out but sends no packet; GetMemberIsActive
     -- returns 0 for out-of-zone members, which is the only reliable signal we have.
-    if not settingsOpen[1] and #cachedItems > 0 then
+    if not settingsOpen[1] and #state.getItems() > 0 then
         local partyMem = AshitaCore:GetMemoryManager():GetParty()
         if partyMem then
             local inZone = {}
@@ -974,7 +935,7 @@ ashita.events.register('d3d_present', 'present_cb', function()
                     end
                 end
             end
-            for _, entry in ipairs(cachedItems) do
+            for _, entry in ipairs(state.getItems()) do
                 if entry.winnerName ~= '' and not inZone[entry.winnerName] then
                     entry.winningLot = 0
                     entry.winnerName = ''
@@ -984,7 +945,7 @@ ashita.events.register('d3d_present', 'present_cb', function()
     end
 
     -- Debug mode re-generates fake data each frame (responds to debugCount changes)
-    local items = settingsOpen[1] and gatherDebugData() or cachedItems
+    local items = settingsOpen[1] and gatherDebugData() or state.getItems()
 
     -- Refresh Rare ownership cache every 30 frames; apply cached values every frame.
     -- Stays at frame 0 until inventory is confirmed loaded (GetContainerCountMax > 0).
@@ -1042,9 +1003,16 @@ ashita.events.register('packet_in', 'treasurepool_packet_in', function(e)
 
     if e.injected then return end
 
+    -- 0x000A: zone enter — player is now logged in / zoned in
+    if e.id == 0x000A then
+        logged_in = true
+        return
+    end
+
     -- 0x000B: zone leave / warp — clear stale pool immediately
     if e.id == 0x000B then
-        cachedItems    = {}
+        logged_in      = false
+        state.clearItems()
         rareOwnedCache = {}
         rareOwnedFrame = 0
         state.reset()
@@ -1053,26 +1021,28 @@ ashita.events.register('packet_in', 'treasurepool_packet_in', function(e)
 
     -- 0x00D2: item added/updated or removed from pool slot
     if e.id == 0x00D2 then
+        if e.size < ffi.sizeof('tp_packet_trophylist_s2c_t') then return end
         local packet = ffi.cast('tp_packet_trophylist_s2c_t*', e.data_modified_raw)
         if packet.TrophyItemNo == 0 then
-            removeFromCache(packet.TrophyItemIndex)
+            state.removeFromCache(packet.TrophyItemIndex)
         else
-            insertSorted(buildItemFromPacket(packet))
+            state.insertSorted(buildItemFromPacket(packet))
         end
         return
     end
 
     -- 0x00D3: lot/pass update or item awarded
     if e.id == 0x00D3 then
+        if e.size < ffi.sizeof('tp_packet_trophysolution_s2c_t') then return end
         local packet  = ffi.cast('tp_packet_trophysolution_s2c_t*', e.data_modified_raw)
         local slotIdx = packet.TrophyItemIndex
 
         if packet.JudgeFlg == 1 or packet.JudgeFlg == 2 then
             -- Item awarded (1) or failed/lost — rare/ex conflict, inventory full (2) — remove from pool
-            removeFromCache(slotIdx)
+            state.removeFromCache(slotIdx)
         elseif packet.JudgeFlg == 0 then
             -- Lot/pass — update existing entry in-place (no re-sort; expiresAt unchanged)
-            for _, entry in ipairs(cachedItems) do
+            for _, entry in ipairs(state.getItems()) do
                 if entry.slot == slotIdx then
                     -- Update current winner
                     local winnerName = ffi.string(packet.sLootName, 16):match('^[^%z]*')
