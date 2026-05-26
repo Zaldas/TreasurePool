@@ -62,7 +62,8 @@ pcall(ffi.cdef, [[
         uint8_t     TrophyItemIndex;
         uint8_t     JudgeFlg;
         uint8_t     sLootName[16];
-        uint8_t     sLootName2[24];
+        uint8_t     sLootName2[16];
+        uint8_t     padding36[6];
     } tp_packet_trophysolution_s2c_t;
 ]])
 
@@ -183,7 +184,7 @@ function state.handlePacketIn(e)
         local judgeFlg = packet.JudgeFlg
 
         -- Extract actor name from sLootName2
-        local actorName = ffi.string(packet.sLootName2, 24):match('^[^%z]*')
+        local actorName = ffi.string(packet.sLootName2, 16):match('^[^%z]*')
 
         if judgeFlg == 0 then
             -- Someone lotted or passed
