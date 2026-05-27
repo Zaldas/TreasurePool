@@ -1048,7 +1048,7 @@ ashita.events.register('packet_in', 'treasurepool_packet_in', function(e)
                     entry.winnerName = (packet.LootPoint > 0 and #winnerName >= 3) and winnerName or ''
 
                     -- Record this actor's lot/pass in partyLots
-                    local actorName = ffi.string(packet.sLootName2, 24):match('^[^%z]*')
+                    local actorName = ffi.string(packet.sLootName2, 16):match('^[^%z]*')
                     if #actorName >= 3 then
                         entry.partyLots[actorName] = (packet.EntryPoint < 0) and 65535 or packet.EntryPoint
                     end
