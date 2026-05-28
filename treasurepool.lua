@@ -300,13 +300,9 @@ local function wireCallbacks()
             return
         end
 
-        -- Live rare check at lot time: rareOwnedCache may be stale in the first 30 frames after an item appears.
-        local inv = AshitaCore:GetMemoryManager():GetInventory()
-        for _, entry in ipairs(gatherTreasureData()) do
+        for _, entry in ipairs(state.getItems()) do
             if entry.slot == slot then
-                local resource = AshitaCore:GetResourceManager():GetItemById(entry.itemId)
-                local isRare   = resource and bit.band(resource.Flags, 0x8000) ~= 0
-                if isRare and inv and playerOwnsRareItem(entry.itemId, inv) then return end
+                if entry.rareOwned then return end
                 break
             end
         end
@@ -980,7 +976,7 @@ ashita.events.register('d3d_present', 'present_cb', function()
         end
     end
 
-    lootWindow.update(items, state.isLotAllActive(), state.isPassAllActive())
+    lootWindow.update(items, state.isPassAllActive())
     drawItemTooltip(items)
     drawLotDetailsWindow(items)
 end)
@@ -1048,7 +1044,7 @@ ashita.events.register('packet_in', 'treasurepool_packet_in', function(e)
                     entry.winnerName = (packet.LootPoint > 0 and #winnerName >= 3) and winnerName or ''
 
                     -- Record this actor's lot/pass in partyLots
-                    local actorName = ffi.string(packet.sLootName2, 24):match('^[^%z]*')
+                    local actorName = ffi.string(packet.sLootName2, 16):match('^[^%z]*')
                     if #actorName >= 3 then
                         entry.partyLots[actorName] = (packet.EntryPoint < 0) and 65535 or packet.EntryPoint
                     end

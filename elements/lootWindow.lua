@@ -60,7 +60,7 @@ lootWindow.onPassAll      = nil
 lootWindow.onItemClick    = nil
 lootWindow.onCollapseToggle = nil
 lootWindow.dragEnabled    = true
-lootWindow.lotAllEnabled  = true   -- set false to hide Lot All (e.g. HXI builds)
+lootWindow.lotAllEnabled  = true   -- set false before deployment on servers where Lot All is banned
 
 ------------------------------------------------------------
 -- Local helpers
@@ -78,6 +78,19 @@ local function updateArrowVisibility()
     else
         arrowUp:hide(utils.VIS_TOKEN)
         arrowDown:hide(utils.VIS_TOKEN)
+    end
+end
+
+local function applyCollapseVisibility(collapsed)
+    for _, item in ipairs(lootItems) do
+        if collapsed then item:hide(VIS_COLLAPSE) else item:show(VIS_COLLAPSE) end
+    end
+    if collapsed then
+        lotAllBtn:hide(VIS_COLLAPSE)
+        passAllBtn:hide(VIS_COLLAPSE)
+    else
+        lotAllBtn:show(VIS_COLLAPSE)
+        passAllBtn:show(VIS_COLLAPSE)
     end
 end
 
@@ -339,7 +352,7 @@ function lootWindow.initialize(layoutRef, bgDef, anchorRef, scale)
     lastCount = -1
 end
 
-function lootWindow.update(items, lotAllActive, passAllActive)
+function lootWindow.update(items, passAllActive)
     if not engine then return end
 
     local n = #items
@@ -402,19 +415,7 @@ function lootWindow.update(items, lotAllActive, passAllActive)
     end
 
     -- Collapsed: hide all rows and footer buttons regardless of hasPending
-    if isCollapsed then
-        for _, item in ipairs(lootItems) do
-            item:hide(VIS_COLLAPSE)
-        end
-        lotAllBtn:hide(VIS_COLLAPSE)
-        passAllBtn:hide(VIS_COLLAPSE)
-    else
-        for _, item in ipairs(lootItems) do
-            item:show(VIS_COLLAPSE)
-        end
-        lotAllBtn:show(VIS_COLLAPSE)
-        passAllBtn:show(VIS_COLLAPSE)
-    end
+    applyCollapseVisibility(isCollapsed)
 
     -- Update button hover states every frame
     lotAllBtn:setHover(lotAllBtn.absoluteVisibility and lotAllBtn:hitTest(mouseX, mouseY))
@@ -475,16 +476,7 @@ function lootWindow.handleMouse(e)
         -- Arrow click: toggle collapse (checked before drag so it takes priority)
         if hitTestArrow(e.x, e.y) then
             isCollapsed = not isCollapsed
-            for _, item in ipairs(lootItems) do
-                if isCollapsed then item:hide(VIS_COLLAPSE) else item:show(VIS_COLLAPSE) end
-            end
-            if isCollapsed then
-                lotAllBtn:hide(VIS_COLLAPSE)
-                passAllBtn:hide(VIS_COLLAPSE)
-            else
-                lotAllBtn:show(VIS_COLLAPSE)
-                passAllBtn:show(VIS_COLLAPSE)
-            end
+            applyCollapseVisibility(isCollapsed)
             updateArrowVisibility()
             relayout(math.max(lastCount, 0))
             if lootWindow.onCollapseToggle then lootWindow.onCollapseToggle(isCollapsed) end
@@ -560,9 +552,7 @@ function lootWindow.setCollapsible(enabled)
     isCollapsible = enabled
     if not enabled and isCollapsed then
         isCollapsed = false
-        for _, item in ipairs(lootItems) do item:show(VIS_COLLAPSE) end
-        lotAllBtn:show(VIS_COLLAPSE)
-        passAllBtn:show(VIS_COLLAPSE)
+        applyCollapseVisibility(false)
     end
     updateArrowVisibility()
     relayout(math.max(lastCount, 0))
@@ -574,16 +564,7 @@ function lootWindow.setCollapsed(collapsed)
     collapsed = (collapsed == true)
     if isCollapsed == collapsed then return end
     isCollapsed = collapsed
-    for _, item in ipairs(lootItems) do
-        if collapsed then item:hide(VIS_COLLAPSE) else item:show(VIS_COLLAPSE) end
-    end
-    if collapsed then
-        lotAllBtn:hide(VIS_COLLAPSE)
-        passAllBtn:hide(VIS_COLLAPSE)
-    else
-        lotAllBtn:show(VIS_COLLAPSE)
-        passAllBtn:show(VIS_COLLAPSE)
-    end
+    applyCollapseVisibility(collapsed)
     updateArrowVisibility()
     relayout(math.max(lastCount, 0))
 end
