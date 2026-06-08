@@ -118,10 +118,6 @@ function state.getItems()
     return cachedItems
 end
 
-function state.clearItems()
-    cachedItems = {}
-end
-
 -- Replaces cachedItems with the provided table and sorts it descending by
 -- expiresAt. Used only by the load-event prime from gatherTreasureData().
 function state.setItems(items)
@@ -159,7 +155,7 @@ end
 ------------------------------------------------------------
 function state.handlePacketIn(e)
     -- 0x00D2: Trophy List — clear member lots for this slot only when the item changes
-    if e.id == 0x00D2 and not e.injected then
+    if e.id == 0x00D2 then
         if e.size < ffi.sizeof('tp_packet_trophylist_s2c_t') then return end
         local packet = ffi.cast('tp_packet_trophylist_s2c_t*', e.data_modified_raw)
         local slotIdx = packet.TrophyItemIndex
@@ -177,7 +173,7 @@ function state.handlePacketIn(e)
     end
 
     -- 0x00D3: Trophy Solution — track member lots, handle inventory full
-    if e.id == 0x00D3 and not e.injected then
+    if e.id == 0x00D3 then
         if e.size < ffi.sizeof('tp_packet_trophysolution_s2c_t') then return end
         local packet = ffi.cast('tp_packet_trophysolution_s2c_t*', e.data_modified_raw)
         local slotIdx  = packet.TrophyItemIndex
@@ -254,10 +250,6 @@ function state.addPassAll(items)
             passAllQueue[#passAllQueue + 1] = entry.slot
         end
     end
-end
-
-function state.isLotAllActive()
-    return #lotAllQueue > 0
 end
 
 function state.isPassAllActive()

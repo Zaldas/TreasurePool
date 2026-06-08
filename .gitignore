@@ -1,2 +1,5 @@
 # Local editor config (machine-specific)
 .vscode/
+
+# claude-mem knowledge base (local only)
+knowledge/
