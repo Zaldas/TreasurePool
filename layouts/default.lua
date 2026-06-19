@@ -233,24 +233,23 @@ local layout = {
 local function loadThemes()
     local themes = {}
 
-    local src = debug.getinfo(1, 'S').source:sub(2)
+    local src        = debug.getinfo(1, 'S').source:sub(2)
     local layoutsDir = src:match('(.+)[/\\][^/\\]+$')
-    local themesDir  = (layoutsDir .. '\\themes'):gsub('/', '\\')
+    local themesDir  = layoutsDir .. '/themes/'
 
-    local handle = io.popen('dir /b "' .. themesDir .. '\\*.lua" 2>nul')
-    if handle then
-        for filename in handle:lines() do
-            local name = filename:match('^(.+)%.lua$')
-            if name then
-                local modPath = 'layouts/themes/' .. name
-                package.loaded[modPath] = nil
-                local ok, def = pcall(require, modPath)
-                if ok and type(def) == 'table' then
-                    themes[name] = def
-                end
+    if not ashita.fs.exists(themesDir) then return themes end
+
+    local contents = ashita.fs.get_directory(themesDir, '.*\\.lua')
+    for _, filename in pairs(contents) do
+        local name = string.sub(filename, 1, -5)
+        if #name > 0 then
+            local modPath = 'layouts/themes/' .. name
+            package.loaded[modPath] = nil
+            local ok, def = pcall(require, modPath)
+            if ok and type(def) == 'table' then
+                themes[name] = def
             end
         end
-        handle:close()
     end
 
     return themes

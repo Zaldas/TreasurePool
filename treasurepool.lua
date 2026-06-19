@@ -462,9 +462,10 @@ local function drawSettingsWindow()
 
     local indent = 6
     imgui.PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0)
-    imgui.SetNextWindowSize({ 270, 0 }, ImGuiCond_Always)
-    if imgui.Begin('TreasurePool.' .. addon.version, settingsOpen, ImGuiWindowFlags_NoResize) then
-        local availW = 270 - 16  -- window width minus padding
+    imgui.SetNextWindowSizeConstraints({ 270, 0 }, { 270, 9999 })
+    if imgui.Begin('TreasurePool.' .. addon.version, settingsOpen, ImGuiWindowFlags_AlwaysAutoResize) then
+        local avail  = imgui.GetContentRegionAvail()
+        local availW = type(avail) == 'table' and avail[1] or avail
 
         if imgui.BeginTabBar('tpSettingsTabs') then
 
