@@ -123,7 +123,7 @@ function lootItem:update(entry, isHovered)
     if entry == nil then return end
 
     self.nameText:update(entry.name)
-    local isRareOwned = entry.rareOwned and entry.lot == 0
+    local isRareOwned = entry.rareOwned
     if isRareOwned then
         self.nameText:color({ r = 195, g = 85, b = 85, a = 255 })
     else
@@ -196,9 +196,11 @@ function lootItem:update(entry, isHovered)
     end
     self.timerText:color(d3dToRgba(timerD3D))
 
-    -- Color always reflects your state
-    local statusColor = { r = 220, g = 220, b = 220, a = 255 }  -- White: no action
-    if entry.lot == 65535 then
+    -- Color always reflects your state; rareOwned takes precedence over lot state
+    local statusColor
+    if entry.rareOwned then
+        statusColor = { r = 195, g = 85,  b = 85,  a = 255 }  -- Red: already own this
+    elseif entry.lot == 65535 then
         statusColor = { r = 100, g = 150, b = 220, a = 255 }  -- Blue: passed
     elseif entry.lot > 0 then
         if entry.lot == entry.winningLot then
@@ -206,6 +208,8 @@ function lootItem:update(entry, isHovered)
         else
             statusColor = { r = 255, g = 140, b = 40,  a = 255 }  -- Orange: losing
         end
+    else
+        statusColor = { r = 220, g = 220, b = 220, a = 255 }  -- White: no action
     end
 
     -- Text content: hover shows your state, default shows pool state
@@ -224,28 +228,30 @@ function lootItem:update(entry, isHovered)
             statusStr = state.formatLot(entry.winningLot) .. ': ' .. entry.winnerName
         elseif entry.lot == 65535 then
             statusStr = 'Passed'
+        elseif entry.rareOwned then
+            statusStr = 'Owned'
         end
     end
     self.statusText:update(statusStr)
     self.statusText:color(statusColor)
 
     local canAct = private[self].buttonsEnabled and isHovered
-    if canAct and entry.lot == 0 and not entry.rareOwned then
-        -- No action yet: both buttons available
-        self.lotBtn:show(utils.VIS_TOKEN)
-        self.passBtn:show(utils.VIS_TOKEN)
-    elseif canAct and entry.lot == 0 and entry.rareOwned then
-        -- Rare item already owned: pass available, lot suppressed
+    if not canAct or entry.lot == 65535 then
+        -- Not hovered, or already passed: no buttons
+        self.lotBtn:hide(utils.VIS_TOKEN)
+        self.passBtn:hide(utils.VIS_TOKEN)
+    elseif entry.rareOwned then
+        -- Own it: lot always blocked; pass still available
         self.lotBtn:hide(utils.VIS_TOKEN)
         self.passBtn:show(utils.VIS_TOKEN)
-    elseif canAct and entry.lot ~= 65535 then
+    elseif entry.lot == 0 then
+        -- No action yet: both available
+        self.lotBtn:show(utils.VIS_TOKEN)
+        self.passBtn:show(utils.VIS_TOKEN)
+    else
         -- Already lotted: can still pass, cannot re-lot
         self.lotBtn:hide(utils.VIS_TOKEN)
         self.passBtn:show(utils.VIS_TOKEN)
-    else
-        -- Already passed, or not hovered: no buttons
-        self.lotBtn:hide(utils.VIS_TOKEN)
-        self.passBtn:hide(utils.VIS_TOKEN)
     end
 
     self.lotBtn:update()
