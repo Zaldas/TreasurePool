@@ -952,7 +952,7 @@ ashita.events.register('d3d_present', 'present_cb', function()
                 local resMgr = AshitaCore:GetResourceManager()
                 rareOwnedCache = {}
                 for _, entry in ipairs(items) do
-                    if entry.lot == 0 and rareOwnedCache[entry.itemId] == nil then
+                    if rareOwnedCache[entry.itemId] == nil then
                         local resource = resMgr:GetItemById(entry.itemId)
                         local isRare   = resource and bit.band(resource.Flags, 0x8000) ~= 0
                         if isRare then
@@ -969,11 +969,7 @@ ashita.events.register('d3d_present', 'present_cb', function()
         end
 
         for _, entry in ipairs(items) do
-            if entry.lot == 0 then
-                entry.rareOwned = rareOwnedCache[entry.itemId] or false
-            else
-                entry.rareOwned = false
-            end
+            entry.rareOwned = rareOwnedCache[entry.itemId] or false
         end
     end
 
