@@ -8,6 +8,13 @@
 require('common')
 local d3d8 = require('d3d8')
 local ffi  = require('ffi')
+local gdi  = require('libs/gdifonts/include')
+
+-- gdifonts auto-registers its own d3d_present handler on load (renders text as soon
+-- as it's required). We own text-over-images ordering here instead: disable its
+-- auto-render (unregistering the handler if already registered) and call
+-- gdi:render() explicitly after our own sprite draw pass below, every frame.
+gdi:set_auto_render(false)
 
 local M = {}
 
@@ -116,27 +123,29 @@ end
 
 -- Global render dispatcher
 ashita.events.register('d3d_present', '__petsreborn_spui_present_cb', function()
-    if d3dSprite == nil then return end
-    d3dSprite:Begin()
-    for _, eng in ipairs(engines) do
-        for i = 1, eng.sortedCount do
-            local v = eng.renderInfo[eng.sortedKeys[i]]
-            if v and v.visible and v.texture ~= nil then
-                if v.nineSlice then
-                    renderNineSlice(d3dSprite, v)
-                else
-                    v.rect.right   = v.nativeW
-                    v.rect.bottom  = v.nativeH
-                    v.vecPos.x     = v.position_x
-                    v.vecPos.y     = v.position_y
-                    v.vecScale.x   = (v.displayW or v.nativeW) / math.max(1, v.nativeW)
-                    v.vecScale.y   = (v.displayH or v.nativeH) / math.max(1, v.nativeH)
-                    d3dSprite:Draw(v.texture, v.rect, v.vecScale, nil, 0.0, v.vecPos, v.color)
+    if d3dSprite ~= nil then
+        d3dSprite:Begin()
+        for _, eng in ipairs(engines) do
+            for i = 1, eng.sortedCount do
+                local v = eng.renderInfo[eng.sortedKeys[i]]
+                if v and v.visible and v.texture ~= nil then
+                    if v.nineSlice then
+                        renderNineSlice(d3dSprite, v)
+                    else
+                        v.rect.right   = v.nativeW
+                        v.rect.bottom  = v.nativeH
+                        v.vecPos.x     = v.position_x
+                        v.vecPos.y     = v.position_y
+                        v.vecScale.x   = (v.displayW or v.nativeW) / math.max(1, v.nativeW)
+                        v.vecScale.y   = (v.displayH or v.nativeH) / math.max(1, v.nativeH)
+                        d3dSprite:Draw(v.texture, v.rect, v.vecScale, nil, 0.0, v.vecPos, v.color)
+                    end
                 end
             end
         end
+        d3dSprite:End()
     end
-    d3dSprite:End()
+    gdi:render() -- draw text every frame, unconditionally, so it always layers on top of sprites
 end)
 
 -- Creates and returns a new isolated sprite engine instance.
