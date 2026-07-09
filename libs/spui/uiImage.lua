@@ -126,7 +126,14 @@ end
 local function setPath(image, path)
     if not image.engine or not image.spr then return end
 
-    local fullPath = addon.path .. path
+    -- absolute paths (drive letter or UNC/leading slash) are passed through as-is,
+    -- relative paths are resolved against the addon's own directory
+    local fullPath
+    if path and (path:match('^%a:[/\\]') or path:match('^[/\\]')) then
+        fullPath = path
+    else
+        fullPath = addon.path .. path
+    end
     local tex, w, h = image.engine:loadImage(fullPath)
     image.spr.texture = tex
     image.spr.nativeW = w
