@@ -77,6 +77,16 @@ local function loadImage(path)
     return nil, 0, 0
 end
 
+-- Writes slice `idx` (0-8) directly into the pre-allocated FFI arrays; no Lua tables.
+local function setSlice(idx, left, top, right, bottom, dstX, dstY, scaleX, scaleY)
+    local r = nsRect[idx]
+    r.left = left; r.top = top; r.right = right; r.bottom = bottom
+    local p = nsVecPos[idx]
+    p.x = dstX; p.y = dstY
+    local s = nsVecScale[idx]
+    s.x = scaleX; s.y = scaleY
+end
+
 local function renderNineSlice(spr, v)
     local bL, bR, bT, bB = v.nineSlice[1], v.nineSlice[2], v.nineSlice[3], v.nineSlice[4]
     local tw, th = v.nativeW, v.nativeH
@@ -99,24 +109,26 @@ local function renderNineSlice(spr, v)
     local scX = mDstW / mSrcW
     local scY = mDstH / mSrcH
 
-    -- 9 slices: TL, TC, TR, ML, MC, MR, BL, BC, BR
-    -- each entry: { srcLeft, srcTop, srcRight, srcBottom, dstX, dstY, scaleX, scaleY }
-    local slices = {
-        { 0,     0,     bL,    bT,    dx,           dy,           uiScale, uiScale },
-        { bL,    0,     tw-bR, bT,    dx+dbL,       dy,           scX,     uiScale },
-        { tw-bR, 0,     tw,    bT,    dx+dw-dbR,    dy,           uiScale, uiScale },
-        { 0,     bT,    bL,    th-bB, dx,           dy+dbT,       uiScale, scY     },
-        { bL,    bT,    tw-bR, th-bB, dx+dbL,       dy+dbT,       scX,     scY     },
-        { tw-bR, bT,    tw,    th-bB, dx+dw-dbR,    dy+dbT,       uiScale, scY     },
-        { 0,     th-bB, bL,    th,    dx,           dy+dh-dbB,    uiScale, uiScale },
-        { bL,    th-bB, tw-bR, th,    dx+dbL,       dy+dh-dbB,    scX,     uiScale },
-        { tw-bR, th-bB, tw,    th,    dx+dw-dbR,    dy+dh-dbB,    uiScale, uiScale },
-    }
-    for i, s in ipairs(slices) do
-        local idx = i - 1
-        nsRect[idx].left = s[1]; nsRect[idx].top = s[2]; nsRect[idx].right = s[3]; nsRect[idx].bottom = s[4]
-        nsVecPos[idx].x = s[5]; nsVecPos[idx].y = s[6]
-        nsVecScale[idx].x = s[7]; nsVecScale[idx].y = s[8]
+    -- Source-space (texture pixel) slice boundaries
+    local midL, midR = bL, tw - bR
+    local midT, midB = bT, th - bB
+    -- Destination-space (UI-scaled) slice boundaries
+    local dstMidL, dstMidR = dx + dbL, dx + dw - dbR
+    local dstMidT, dstMidB = dy + dbT, dy + dh - dbB
+
+    -- 9 slices: TL, TC, TR, ML, MC, MR, BL, BC, BR.
+    -- Corners use uiScale so they shrink/grow with the UI scale factor.
+    setSlice(0, 0,    0,    midL, midT, dx,      dy,      uiScale, uiScale)  -- TL
+    setSlice(1, midL, 0,    midR, midT, dstMidL, dy,      scX,     uiScale)  -- TC
+    setSlice(2, midR, 0,    tw,   midT, dstMidR, dy,      uiScale, uiScale)  -- TR
+    setSlice(3, 0,    midT, midL, midB, dx,      dstMidT, uiScale, scY    )  -- ML
+    setSlice(4, midL, midT, midR, midB, dstMidL, dstMidT, scX,     scY    )  -- MC
+    setSlice(5, midR, midT, tw,   midB, dstMidR, dstMidT, uiScale, scY    )  -- MR
+    setSlice(6, 0,    midB, midL, th,   dx,      dstMidB, uiScale, uiScale)  -- BL
+    setSlice(7, midL, midB, midR, th,   dstMidL, dstMidB, scX,     uiScale)  -- BC
+    setSlice(8, midR, midB, tw,   th,   dstMidR, dstMidB, uiScale, uiScale)  -- BR
+
+    for idx = 0, 8 do
         spr:Draw(v.texture, nsRect[idx], nsVecScale[idx], nil, 0.0, nsVecPos[idx], v.color)
     end
 end
