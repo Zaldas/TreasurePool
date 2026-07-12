@@ -12,7 +12,6 @@ local uiText       = require('libs/spui/uiText')
 local uiButton     = require('libs/spui/uiButton')
 local lootItem     = require('elements/lootItem')
 local utils        = require('libs/spui/utils')
-local bit          = require('bit')
 
 local lootWindow = {}
 
@@ -484,7 +483,7 @@ function lootWindow.handleMouse(e)
             root.posY = anchor.y
             root:layoutElement()
             e.blocked = true
-            return true
+            return false
         end
         return false
     end
