@@ -252,6 +252,8 @@ function uiImage:color(r, g, b)
         r = r.r
     end
 
+    if type(r) ~= 'number' then utils:print('uiImage:color malformed color value!', 4) return end -- rejects malformed color tables (e.g. missing .a)
+
     if private[self].color.r ~= r or private[self].color.g ~= g or private[self].color.b ~= b then
         private[self].color.r = r
         private[self].color.g = g
