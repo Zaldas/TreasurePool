@@ -28,15 +28,38 @@ local function d3dToRgba(d)
     }
 end
 
+-- Fixed colors used every frame in update(); allocated once here instead of
+-- per-frame table literals. Downstream color()/setColor() copy the values out,
+-- so sharing these tables is safe.
+local COLOR_OWNED_RED       = { r = 195, g = 85,  b = 85,  a = 255 }  -- Red: already own this
+local COLOR_NAME_WHITE      = { r = 232, g = 232, b = 232, a = 255 }  -- Default name color
+local COLOR_PASSED_BLUE     = { r = 100, g = 150, b = 220, a = 255 }  -- Blue: passed
+local COLOR_WINNING_GOLD    = { r = 255, g = 200, b = 50,  a = 255 }  -- Gold: winning
+local COLOR_LOSING_ORANGE   = { r = 255, g = 140, b = 40,  a = 255 }  -- Orange: losing
+local COLOR_NO_ACTION_WHITE = { r = 220, g = 220, b = 220, a = 255 }  -- White: no action
+
 function lootItem:init(engine, layout)
     self.super:init()
 
     local rDef = layout.nameText and layout.nameText.rareImg
     local eDef = layout.nameText and layout.nameText.exImg
 
+    -- Pre-convert the three timer colors once (text variant + bar variant with
+    -- a=128) instead of calling d3dToRgba every frame in update().
+    local tc = layout.timerText.colors
+    local timerTextRgba = {
+        critical = d3dToRgba(tc.critical),
+        warning  = d3dToRgba(tc.warning),
+        normal   = d3dToRgba(tc.normal),
+    }
+    local timerBarRgba = {}
+    for k, c in pairs(timerTextRgba) do
+        timerBarRgba[k] = { r = c.r, g = c.g, b = c.b, a = 128 }
+    end
+
     private[self] = {
-        timerColors    = layout.timerText.colors,
-        buttonsEnabled = true,
+        timerTextRgba  = timerTextRgba,
+        timerBarRgba   = timerBarRgba,
         rowWidth       = 0,
         rowHeight      = 0,
         currentSlot    = nil,
@@ -45,6 +68,8 @@ function lootItem:init(engine, layout)
         rareImgDef     = rDef,
         exImgDef       = eDef,
         lastIconItemId = nil,
+        isRare         = false,
+        isEx           = false,
     }
 
     self.timerBar = uiBar.new(layout.timerBar, engine, 1.0)
@@ -114,10 +139,6 @@ function lootItem:getSlot()
     return private[self].currentSlot
 end
 
-function lootItem:setButtonsEnabled(v)
-    private[self].buttonsEnabled = v
-end
-
 function lootItem:update(entry, isHovered)
     if not self.isEnabled then return end
     if entry == nil then return end
@@ -125,32 +146,34 @@ function lootItem:update(entry, isHovered)
     self.nameText:update(entry.name)
     local isRareOwned = entry.rareOwned
     if isRareOwned then
-        self.nameText:color({ r = 195, g = 85, b = 85, a = 255 })
+        self.nameText:color(COLOR_OWNED_RED)
     else
-        self.nameText:color({ r = 232, g = 232, b = 232, a = 255 })
+        self.nameText:color(COLOR_NAME_WHITE)
     end
 
-    -- Resource item (used for icon bitmap, Rare/Ex flags)
-    local resItem = entry.itemId and entry.itemId > 0
-        and AshitaCore:GetResourceManager():GetItemById(entry.itemId)
-
-    -- Icon dirty flag: only reload texture when the item changes. Reset to nil
-    -- when the slot is vacated (itemId == 0) so the next item triggers a load.
-    if entry.itemId == 0 then
+    -- Icon texture + Rare/Ex flags: only look up the resource when the item
+    -- changes. Reset when the slot is vacated (itemId == 0) so the next item
+    -- triggers a reload and doesn't inherit stale Rare/Ex flags.
+    if not entry.itemId or entry.itemId == 0 then
         private[self].lastIconItemId = nil
+        private[self].isRare = false
+        private[self].isEx   = false
     elseif entry.itemId ~= private[self].lastIconItemId then
         private[self].lastIconItemId = entry.itemId
+        local resItem = AshitaCore:GetResourceManager():GetItemById(entry.itemId)
         if resItem and resItem.ImageSize and resItem.ImageSize > 0 then
             local tex, w, h = private[self].engine:loadImageFromMemory(resItem.Bitmap, resItem.ImageSize, entry.itemId)
             self.iconImg:setTexture(tex, w, h)
         end
+        local flags = resItem and resItem.Flags or 0
+        private[self].isRare = bit.band(flags, 0x8000) ~= 0
+        private[self].isEx   = bit.band(flags, 0x4000) ~= 0
     end
 
     -- Rare/Ex tag icons: position dynamically after name text
     if self.rareImg or self.exImg then
-        local flags  = resItem and resItem.Flags or 0
-        local isRare = bit.band(flags, 0x8000) ~= 0
-        local isEx   = bit.band(flags, 0x4000) ~= 0
+        local isRare = private[self].isRare
+        local isEx   = private[self].isEx
         local rDef  = private[self].rareImgDef
         local scale = (self.absoluteScale and self.absoluteScale.x) or 1
         local baseX  = private[self].nameTextX
@@ -185,31 +208,30 @@ function lootItem:update(entry, isHovered)
     local remaining = math.max(0, (entry.expiresAt or 0) - os.time())
     self.timerText:update(formatTimer(remaining))
 
-    local tc = private[self].timerColors
-    local timerD3D
-    if remaining <= 0 or remaining < 60 then
-        timerD3D = tc.critical
+    local timerKey
+    if remaining < 60 then
+        timerKey = 'critical'
     elseif remaining <= 120 then
-        timerD3D = tc.warning
+        timerKey = 'warning'
     else
-        timerD3D = tc.normal
+        timerKey = 'normal'
     end
-    self.timerText:color(d3dToRgba(timerD3D))
+    self.timerText:color(private[self].timerTextRgba[timerKey])
 
     -- Color always reflects your state; rareOwned takes precedence over lot state
     local statusColor
     if entry.rareOwned then
-        statusColor = { r = 195, g = 85,  b = 85,  a = 255 }  -- Red: already own this
+        statusColor = COLOR_OWNED_RED
     elseif entry.lot == state.LOT_PASSED then
-        statusColor = { r = 100, g = 150, b = 220, a = 255 }  -- Blue: passed
+        statusColor = COLOR_PASSED_BLUE
     elseif entry.lot > 0 then
         if entry.lot == entry.winningLot then
-            statusColor = { r = 255, g = 200, b = 50,  a = 255 }  -- Gold: winning
+            statusColor = COLOR_WINNING_GOLD
         else
-            statusColor = { r = 255, g = 140, b = 40,  a = 255 }  -- Orange: losing
+            statusColor = COLOR_LOSING_ORANGE
         end
     else
-        statusColor = { r = 220, g = 220, b = 220, a = 255 }  -- White: no action
+        statusColor = COLOR_NO_ACTION_WHITE
     end
 
     -- Text content: hover shows your state, default shows pool state
@@ -235,7 +257,7 @@ function lootItem:update(entry, isHovered)
     self.statusText:update(statusStr)
     self.statusText:color(statusColor)
 
-    local canAct = private[self].buttonsEnabled and isHovered
+    local canAct = isHovered
     if not canAct or entry.lot == state.LOT_PASSED then
         -- Not hovered, or already passed: no buttons
         self.lotBtn:hide(utils.VIS_TOKEN)
@@ -259,9 +281,7 @@ function lootItem:update(entry, isHovered)
 
     local barValue = math.max(0, math.min(1, remaining / state.POOL_TTL))
     self.timerBar:setValue(barValue)
-    local barColor = d3dToRgba(timerD3D)
-    barColor.a = 128
-    self.timerBar:setColor(barColor)
+    self.timerBar:setColor(private[self].timerBarRgba[timerKey])
     self.timerBar:update()
 
     self.separator:update()
