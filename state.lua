@@ -313,9 +313,22 @@ function state.handlePacketIn(e)
         if e.size < ffi.sizeof('tp_packet_itemattr_s2c_t') then return end
         local packet = ffi.cast('tp_packet_itemattr_s2c_t*', e.data_modified_raw)
         local itemNo = packet.ItemNo
-        for _, entry in ipairs(cachedItems) do
-            if entry.itemId == itemNo then
-                entry.rareOwned = computeRareOwned(itemNo)
+        if itemNo == 0 then
+            -- Removal/slot-clear event (item used/traded/sold/dropped, or
+            -- quantity hit 0): the server omits ItemNo when PItem is null,
+            -- so the affected item can't be identified from the packet.
+            -- Only previously-owned entries can flip to unowned on a
+            -- removal, so re-check every entry currently flagged owned.
+            for _, entry in ipairs(cachedItems) do
+                if entry.rareOwned then
+                    entry.rareOwned = computeRareOwned(entry.itemId)
+                end
+            end
+        else
+            for _, entry in ipairs(cachedItems) do
+                if entry.itemId == itemNo then
+                    entry.rareOwned = computeRareOwned(itemNo)
+                end
             end
         end
         return
