@@ -34,6 +34,7 @@ local isCollapsed   = false
 local lotAllBtn   = nil
 local passAllBtn  = nil
 local lootItems   = {}
+local visibleRows = 0           -- rows currently shown via VIS_POOL; rows beyond this are pooled (hidden)
 local lastCount   = -1
 local hoveredIdx  = nil
 local pressedBtn  = nil
@@ -51,6 +52,14 @@ local uiScale     = 1
 -- VIS_DEFAULT = 1, VIS_TOKEN = 2, VIS_INIT = 3 (libs/spui/utils.lua).
 -- Kept local here because it is not part of the upstream spui framework.
 local VIS_COLLAPSE = 4
+
+-- TreasurePool-specific visibility flag (also local to this file, not part of
+-- the upstream spui framework; ID 5 is unique vs. the flags listed above).
+-- Controls pooled-row visibility independent of VIS_COLLAPSE: rows beyond the
+-- active pool count are hidden and kept for reuse instead of being destroyed.
+-- Both flags compose via uiElement's multi-flag visibility (visible only when
+-- ALL flags are true), so neither overrides the other.
+local VIS_POOL = 5
 
 -- Callbacks (set by treasurepool.lua)
 lootWindow.onLotSlot      = nil
@@ -349,6 +358,7 @@ function lootWindow.initialize(layoutRef, bgDef, anchorRef, scale)
     passAllBtn:setText('Pass All')
 
     lootItems = {}
+    visibleRows = 0
     lastCount = -1
 end
 
@@ -357,24 +367,40 @@ function lootWindow.update(items, passAllActive)
 
     local n = #items
 
-    -- Sync pool: destroy excess
-    while #lootItems > n do
-        local item = table.remove(lootItems)
-        root:removeChild(item)
-        item:destroy()
+    -- Sync pool: rows are pooled, never destroyed mid-session. The game's
+    -- treasure pool has 10 slots (gatherTreasureData's `for i = 0, 9`), so at
+    -- most 10 rows are ever constructed; after that, count changes only toggle
+    -- VIS_POOL visibility on existing rows.
+    if n < visibleRows then
+        -- Shrink: hide excess rows but keep them in lootItems for reuse
+        for i = n + 1, visibleRows do
+            lootItems[i]:hide(VIS_POOL)
+        end
+    elseif n > visibleRows then
+        -- Grow: re-show pooled rows; construct new ones only when n exceeds
+        -- the pool size for the first time
+        for i = visibleRows + 1, n do
+            local item = lootItems[i]
+            if item then
+                -- Rewire callbacks on reuse: a no-op in practice (the closures
+                -- capture the item itself, not the slot), kept for clarity and
+                -- to match the per-item wiring pattern below
+                item.lotBtn.onClick  = makeLotCallback(item)
+                item.passBtn.onClick = makePassCallback(item)
+            else
+                item = lootItem.new(engine, layout.lootItem)
+                item:setRowDimensions(layout.window.width, layout.window.rowH)
+                root:addChild(item)
+                item.lotBtn:setText('Lot')
+                item.passBtn:setText('Pass')
+                item.lotBtn.onClick  = makeLotCallback(item)
+                item.passBtn.onClick = makePassCallback(item)
+                table.insert(lootItems, item)
+            end
+            item:show(VIS_POOL)
+        end
     end
-
-    -- Sync pool: create new
-    while #lootItems < n do
-        local item = lootItem.new(engine, layout.lootItem)
-        item:setRowDimensions(layout.window.width, layout.window.rowH)
-        root:addChild(item)
-        item.lotBtn:setText('Lot')
-        item.passBtn:setText('Pass')
-        item.lotBtn.onClick  = makeLotCallback(item)
-        item.passBtn.onClick = makePassCallback(item)
-        table.insert(lootItems, item)
-    end
+    visibleRows = n
 
     -- Relayout if count changed
     if n ~= lastCount then
@@ -579,6 +605,7 @@ function lootWindow.destroy()
         item:destroy()
     end
     lootItems = {}
+    visibleRows = 0
     if root then
         root:dispose()
         root = nil
