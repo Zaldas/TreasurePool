@@ -34,6 +34,7 @@ jobs:
           git archive HEAD --prefix=TreasurePool/ | tar -xC release-hxi/
           sed -i 's/lootWindow\.lotAllEnabled  = true/lootWindow.lotAllEnabled  = false/' \
             release-hxi/TreasurePool/elements/lootWindow.lua
+          grep -q 'lootWindow.lotAllEnabled  = false' release-hxi/TreasurePool/elements/lootWindow.lua || { echo "ERROR: Lot-All-disable patch did not apply - lootWindow.lua no longer matches the expected pattern"; exit 1; }
           cd release-hxi && zip -r ../release/TreasurePool-HXI.zip TreasurePool && cd ..
 
           # --- Fonts (install to Ashita/addons root alongside the addon folder) ---
