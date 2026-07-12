@@ -100,13 +100,42 @@ local function tooltipAllowedForType(itemType, tpSettings)
     return tt.items  -- catch-all: seals, crystals, key items, fish, etc.
 end
 
+-- Item resource lookups, job lines, and description cleanup are constant per
+-- itemId — cache them so hovering a row doesn't recompute them every frame.
+-- Keyed by itemId; grows only with distinct items hovered (no eviction needed).
+local tooltipCache = {}
+
+local function getTooltipData(itemId)
+    local cached = tooltipCache[itemId]
+    if cached then return cached end
+
+    local item = AshitaCore:GetResourceManager():GetItemById(itemId)
+    if not item then return nil end
+
+    local desc = item.Description and item.Description[1]
+    local cleanedDesc = nil
+    if desc and #desc > 0 then
+        cleanedDesc = cleanDescription(desc)
+    end
+
+    cached = {
+        item        = item,
+        jobsLines   = buildJobsLines(item.Jobs),
+        cleanedDesc = cleanedDesc,
+    }
+    tooltipCache[itemId] = cached
+    return cached
+end
+
 function itemTooltip.draw(items, tpSettings)
     local entry = lootWindow.getHoveredEntry(items)
     if not entry or not entry.itemId or entry.itemId == 0 then return end
 
-    local item = AshitaCore:GetResourceManager():GetItemById(entry.itemId)
-    if not item then return end
+    local data = getTooltipData(entry.itemId)
+    if not data then return end
+    local item = data.item
 
+    -- Intentionally uncached: depends on live tooltip settings toggles.
     if not tooltipAllowedForType(item.Type, tpSettings) then return end
 
     imgui.BeginTooltip()
@@ -119,18 +148,16 @@ function itemTooltip.draw(items, tpSettings)
         imgui.Text('Lv. ' .. tostring(item.Level))
     end
 
-    local jobsLines = buildJobsLines(item.Jobs)
-    if jobsLines then
-        for _, line in ipairs(jobsLines) do
+    if data.jobsLines then
+        for _, line in ipairs(data.jobsLines) do
             imgui.TextDisabled(line)
         end
     end
 
-    local desc = item.Description and item.Description[1]
-    if desc and #desc > 0 then
+    if data.cleanedDesc then
         imgui.Separator()
         imgui.PushTextWrapPos(imgui.GetFontSize() * 22)
-        imgui.TextUnformatted(cleanDescription(desc))
+        imgui.TextUnformatted(data.cleanedDesc)
         imgui.PopTextWrapPos()
     end
 
