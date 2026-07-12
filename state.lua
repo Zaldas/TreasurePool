@@ -320,10 +320,14 @@ function state.handlePacketIn(e)
         if e.size < ffi.sizeof('tp_packet_trophylist_s2c_t') then return end
         local packet = ffi.cast('tp_packet_trophylist_s2c_t*', e.data_modified_raw)
         local slotIdx = packet.TrophyItemIndex
-        if packet.TrophyItemNo == 0 then
+        -- Same Gold==0 guard as the cache removal below: TrophyItemNo == 0
+        -- with nonzero Gold is a gold-only drop on retail, where
+        -- TrophyItemIndex may be stale/junk — only treat it as a slot
+        -- removal when Gold is also 0. Otherwise leave memberLots untouched.
+        if packet.TrophyItemNo == 0 and packet.Gold == 0 then
             memberLots[slotIdx] = nil
             memberLotItemKeys[slotIdx] = nil
-        else
+        elseif packet.TrophyItemNo ~= 0 then
             local itemKey = tostring(packet.TrophyItemNo) .. ':' .. tostring(packet.StartTime)
             if memberLotItemKeys[slotIdx] ~= itemKey then
                 memberLots[slotIdx] = {}
