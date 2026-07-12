@@ -302,7 +302,9 @@ local function buildItemFromPacket(packet)
         slot       = slotIdx,
         itemId     = itemId,
         name       = (resource and resource.Name[1]) or 'Unknown',
-        lot        = packet.IsLocallyLotted,
+        -- IsLocallyLotted is a boolean gate (0/1); the actual lot value is
+        -- the separate Point field. Both are always 0 on HorizonXI today.
+        lot        = (packet.IsLocallyLotted == 1) and packet.Point or 0,
         winningLot = packet.LootPoint,
         winnerName = winnerName,
         expiresAt  = os.time() + state.POOL_TTL,
@@ -329,9 +331,12 @@ function state.handlePacketIn(e)
             end
         end
 
-        if packet.TrophyItemNo == 0 then
+        -- TrophyItemNo == 0 with nonzero Gold is a gold-only drop on retail,
+        -- where TrophyItemIndex may be stale/junk — only treat it as a slot
+        -- removal when Gold is also 0.
+        if packet.TrophyItemNo == 0 and packet.Gold == 0 then
             state.removeFromCache(slotIdx)
-        else
+        elseif packet.TrophyItemNo ~= 0 then
             local item = buildItemFromPacket(packet)
             item.rareOwned = computeRareOwned(item.itemId)
             state.insertSorted(item)
@@ -406,7 +411,11 @@ function state.handlePacketIn(e)
                 end
             end
         elseif judgeFlg == 1 then
-            -- Item awarded — remove from pool
+            -- Item awarded — remove from pool. Also clear member lot state so
+            -- a same-second re-drop of an identical item into this slot can't
+            -- inherit the previous occupant's lot/pass entries.
+            memberLots[slotIdx] = nil
+            memberLotItemKeys[slotIdx] = nil
             state.removeFromCache(slotIdx)
         elseif judgeFlg == 2 then
             -- Inventory full notification
@@ -422,6 +431,9 @@ function state.handlePacketIn(e)
                 end
             end
             print(chat.header('TreasurePool') .. chat.warning('Cannot obtain ' .. itemName .. ' - item lost.'))
+            state.removeFromCache(slotIdx)
+        elseif judgeFlg >= 3 then
+            -- Retail JudgeFlg 3+ silently clears the pool slot (no message)
             state.removeFromCache(slotIdx)
         end
         return
