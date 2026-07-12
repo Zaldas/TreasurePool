@@ -153,6 +153,36 @@ end
 ------------------------------------------------------------
 -- Packet handling
 ------------------------------------------------------------
+local function getPlayerName()
+    local party = AshitaCore:GetMemoryManager():GetParty()
+    local name  = party and party:GetMemberName(0)
+    return (type(name) == 'string' and #name > 0) and name or 'You'
+end
+
+local function buildItemFromPacket(packet)
+    local itemId   = packet.TrophyItemNo
+    local slotIdx  = packet.TrophyItemIndex
+    local resource = AshitaCore:GetResourceManager():GetItemById(itemId)
+
+    local winnerName = ffi.string(packet.LootActName, 16):match('^[^%z]*')
+    if packet.LootPoint == 0 or #winnerName < 3 then
+        winnerName = ''
+    end
+
+    return {
+        slot       = slotIdx,
+        itemId     = itemId,
+        name       = (resource and resource.Name[1]) or 'Unknown',
+        lot        = packet.IsLocallyLotted,
+        winningLot = packet.LootPoint,
+        winnerName = winnerName,
+        expiresAt  = os.time() + 300,
+        playerName = getPlayerName(),
+        -- populated by 0x00D3 lot/pass packets as they arrive
+        partyLots  = {},
+    }
+end
+
 function state.handlePacketIn(e)
     -- 0x00D2: Trophy List — clear member lots for this slot only when the item changes
     if e.id == 0x00D2 then
@@ -168,6 +198,12 @@ function state.handlePacketIn(e)
                 memberLots[slotIdx] = {}
                 memberLotItemKeys[slotIdx] = itemKey
             end
+        end
+
+        if packet.TrophyItemNo == 0 then
+            state.removeFromCache(slotIdx)
+        else
+            state.insertSorted(buildItemFromPacket(packet))
         end
         return
     end
@@ -194,6 +230,30 @@ function state.handlePacketIn(e)
                     memberLots[slotIdx][actorName] = { lot = packet.EntryPoint, passed = false }
                 end
             end
+
+            -- Update existing cache entry in-place (no re-sort; expiresAt unchanged)
+            for _, entry in ipairs(cachedItems) do
+                if entry.slot == slotIdx then
+                    -- Update current winner
+                    local winnerName = ffi.string(packet.sLootName, 16):match('^[^%z]*')
+                    entry.winningLot = packet.LootPoint
+                    entry.winnerName = (packet.LootPoint > 0 and #winnerName >= 3) and winnerName or ''
+
+                    -- Record this actor's lot/pass in partyLots
+                    if #actorName >= 3 then
+                        entry.partyLots[actorName] = (packet.EntryPoint < 0) and 65535 or packet.EntryPoint
+                    end
+
+                    -- Update local lot if this action was ours
+                    if actorName == getPlayerName() then
+                        entry.lot = entry.partyLots[actorName]
+                    end
+                    break
+                end
+            end
+        elseif judgeFlg == 1 then
+            -- Item awarded — remove from pool
+            state.removeFromCache(slotIdx)
         elseif judgeFlg == 2 then
             -- Inventory full notification
             local inv = AshitaCore:GetMemoryManager():GetInventory()
@@ -206,6 +266,7 @@ function state.handlePacketIn(e)
                 end
             end
             print(chat.header('TreasurePool') .. chat.warning('Cannot obtain ' .. itemName .. ' - item lost.'))
+            state.removeFromCache(slotIdx)
         end
         return
     end
