@@ -68,6 +68,25 @@ pcall(ffi.cdef, [[
         uint8_t     sLootName2[16];
         uint8_t     padding36[6];
     } tp_packet_trophysolution_s2c_t;
+
+    // Packet: 0x0020 - Item Attr (Server to Client)
+    // Sent to populate an item's full information; fires whenever an
+    // inventory item slot changes. Only ItemNo is read; the remaining
+    // fields exist so ffi.sizeof matches the wire format (0x2C bytes)
+    // for bounds-checking.
+    typedef struct tp_packet_itemattr_s2c_t {
+        uint16_t    id: 9;
+        uint16_t    size: 7;
+        uint16_t    sync;
+        uint32_t    ItemNum;
+        uint32_t    Price;
+        uint16_t    ItemNo;
+        uint8_t     Category;
+        uint8_t     ItemIndex;
+        uint8_t     LockFlg;
+        uint8_t     Attr[24];
+        uint8_t     padding29[3];
+    } tp_packet_itemattr_s2c_t;
 ]])
 
 ------------------------------------------------------------
@@ -81,6 +100,39 @@ local passAllQueue       = {}
 local frameCount         = 0
 local reconcileFrame     = 0
 local cachedItems        = {}
+
+------------------------------------------------------------
+-- Rare ownership
+------------------------------------------------------------
+-- All personal storage containers; excludes Temporary (3) and Recycle (17).
+local OWNED_CONTAINERS = { 0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 }
+
+-- Returns true if the player already owns a copy of itemId in any personal
+-- storage container. Self-sufficient: fetches inventory directly.
+function state.playerOwnsRareItem(itemId)
+    local inv = AshitaCore:GetMemoryManager():GetInventory()
+    if not inv then return false end
+    for _, container in ipairs(OWNED_CONTAINERS) do
+        local max = inv:GetContainerCountMax(container)
+        for slot = 0, max - 1 do
+            local item = inv:GetContainerItem(container, slot)
+            if item and item.Id == itemId then return true end
+        end
+    end
+    return false
+end
+
+-- Returns whether the player owns itemId, but only scans inventory when the
+-- item is actually flagged Rare (0x8000); non-rare items are never "owned"
+-- for pool purposes.
+local function computeRareOwned(itemId)
+    local resource = AshitaCore:GetResourceManager():GetItemById(itemId)
+    local isRare   = resource and bit.band(resource.Flags, 0x8000) ~= 0
+    if isRare then
+        return state.playerOwnsRareItem(itemId)
+    end
+    return false
+end
 
 ------------------------------------------------------------
 -- Cache helpers
@@ -124,9 +176,16 @@ end
 
 -- Replaces cachedItems with the provided table and sorts it descending by
 -- expiresAt. Used only by the load-event prime from gatherTreasureData().
+-- Entries arriving without a rareOwned field get it computed here, since the
+-- packet-driven paths (0x00D2 insert / 0x0020 invalidation) never saw them.
 function state.setItems(items)
     cachedItems = items
     table.sort(cachedItems, function(a, b) return a.expiresAt > b.expiresAt end)
+    for _, item in ipairs(cachedItems) do
+        if item.rareOwned == nil then
+            item.rareOwned = computeRareOwned(item.itemId)
+        end
+    end
 end
 
 -- Removes entries that expired more than 30 seconds ago. Iterates backwards
@@ -240,7 +299,24 @@ function state.handlePacketIn(e)
         if packet.TrophyItemNo == 0 then
             state.removeFromCache(slotIdx)
         else
-            state.insertSorted(buildItemFromPacket(packet))
+            local item = buildItemFromPacket(packet)
+            item.rareOwned = computeRareOwned(item.itemId)
+            state.insertSorted(item)
+        end
+        return
+    end
+
+    -- 0x0020: Item Attr — an inventory item slot changed; recompute rare
+    -- ownership for any pool entries matching the affected item. Bounded
+    -- scan (at most 10 pool entries), cheap to run on every arrival.
+    if e.id == 0x0020 then
+        if e.size < ffi.sizeof('tp_packet_itemattr_s2c_t') then return end
+        local packet = ffi.cast('tp_packet_itemattr_s2c_t*', e.data_modified_raw)
+        local itemNo = packet.ItemNo
+        for _, entry in ipairs(cachedItems) do
+            if entry.itemId == itemNo then
+                entry.rareOwned = computeRareOwned(itemNo)
+            end
         end
         return
     end

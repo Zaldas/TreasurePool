@@ -96,8 +96,6 @@ local settingsOpen     = { false }
 local logged_in        = false
 local lotDetailsSlot   = nil
 local lotDetailsOpen   = { false }
-local rareOwnedCache   = {}
-local rareOwnedFrame   = 0
 
 local function getPlayerName()
     local party = AshitaCore:GetMemoryManager():GetParty()
@@ -127,20 +125,6 @@ local function isInventoryFull()
     local inv = AshitaCore:GetMemoryManager():GetInventory()
     if not inv then return false end
     return inv:GetContainerCount(0) >= inv:GetContainerCountMax(0)
-end
-
--- All personal storage containers; excludes Temporary (3) and Recycle (17).
-local OWNED_CONTAINERS = { 0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 }
-
-local function playerOwnsRareItem(itemId, inv)
-    for _, container in ipairs(OWNED_CONTAINERS) do
-        local max = inv:GetContainerCountMax(container)
-        for slot = 0, max - 1 do
-            local item = inv:GetContainerItem(container, slot)
-            if item and item.Id == itemId then return true end
-        end
-    end
-    return false
 end
 
 -- Compute getEffectiveScale() from screen resolution (1440p baseline)
@@ -312,7 +296,6 @@ local function wireCallbacks()
             return
         end
 
-        local inv      = AshitaCore:GetMemoryManager():GetInventory()
         local resMgr   = AshitaCore:GetResourceManager()
         local items    = gatherTreasureData()
         local lottable = {}
@@ -321,7 +304,7 @@ local function wireCallbacks()
             if entry.lot ~= 0 then goto continue end
             local resource = resMgr:GetItemById(entry.itemId)
             local isRare   = resource and bit.band(resource.Flags, 0x8000) ~= 0
-            if isRare and inv and playerOwnsRareItem(entry.itemId, inv) then goto continue end
+            if isRare and state.playerOwnsRareItem(entry.itemId) then goto continue end
             lottable[#lottable + 1] = entry
             ::continue::
         end
@@ -902,37 +885,9 @@ ashita.events.register('d3d_present', 'present_cb', function()
     if not settingsOpen[1] then state.reconcileWinners() end
 
     -- Debug mode re-generates fake data each frame (responds to debugCount changes)
+    -- Live entries carry rareOwned directly (computed at pool-insert time in
+    -- state.lua, invalidated by 0x0020 item-attr packets).
     local items = settingsOpen[1] and gatherDebugData() or state.getItems()
-
-    -- Refresh Rare ownership cache every 30 frames; apply cached values every frame.
-    -- Stays at frame 0 until inventory is confirmed loaded (GetContainerCountMax > 0).
-    if not settingsOpen[1] then
-        if rareOwnedFrame == 0 then
-            local inv = AshitaCore:GetMemoryManager():GetInventory()
-            if inv and inv:GetContainerCountMax(0) > 0 then
-                local resMgr = AshitaCore:GetResourceManager()
-                rareOwnedCache = {}
-                for _, entry in ipairs(items) do
-                    if rareOwnedCache[entry.itemId] == nil then
-                        local resource = resMgr:GetItemById(entry.itemId)
-                        local isRare   = resource and bit.band(resource.Flags, 0x8000) ~= 0
-                        if isRare then
-                            rareOwnedCache[entry.itemId] = playerOwnsRareItem(entry.itemId, inv)
-                        else
-                            rareOwnedCache[entry.itemId] = false
-                        end
-                    end
-                end
-                rareOwnedFrame = 1
-            end
-        else
-            rareOwnedFrame = (rareOwnedFrame + 1) % 30
-        end
-
-        for _, entry in ipairs(items) do
-            entry.rareOwned = rareOwnedCache[entry.itemId] or false
-        end
-    end
 
     lootWindow.update(items, state.isPassAllActive())
     drawItemTooltip(items)
@@ -964,9 +919,7 @@ ashita.events.register('packet_in', 'treasurepool_packet_in', function(e)
 
     -- 0x000B: zone leave / warp — clear stale pool immediately
     if e.id == 0x000B then
-        logged_in      = false
-        rareOwnedCache = {}
-        rareOwnedFrame = 0
+        logged_in = false
         state.reset()
         return
     end
