@@ -122,6 +122,9 @@ function settingsWindow.draw(tpSettings, settingsOpen, themeList, callbacks)
                         tpSettings.debugCount = v
                     end
                 end
+                if imgui.IsItemDeactivatedAfterEdit() then
+                    settings.save()
+                end
 
                 imgui.Spacing()
                 imgui.Separator()
@@ -144,7 +147,7 @@ function settingsWindow.draw(tpSettings, settingsOpen, themeList, callbacks)
                 imgui.Spacing()
 
                 local tt = tpSettings.tooltip
-                local ttEnabled = { tt and tt.enabled or false }
+                local ttEnabled = { tt.enabled }
 
                 imgui.SetCursorPosX(imgui.GetCursorPosX() + indent)
                 if imgui.Checkbox('Show Item Tooltip', ttEnabled) then
@@ -161,7 +164,7 @@ function settingsWindow.draw(tpSettings, settingsOpen, themeList, callbacks)
                     imgui.EndTooltip()
                 end
 
-                if tt and tt.enabled then
+                if tt.enabled then
                     imgui.Spacing()
 
                     local subIndent = indent + 10
@@ -202,7 +205,7 @@ function settingsWindow.draw(tpSettings, settingsOpen, themeList, callbacks)
                 imgui.Spacing()
 
                 imgui.SetCursorPosX(imgui.GetCursorPosX() + indent)
-                local ttLD = { tt and tt.lotDetails or false }
+                local ttLD = { tt.lotDetails }
                 if imgui.Checkbox('Show Lot Details', ttLD) then
                     tpSettings.tooltip.lotDetails = ttLD[1]
                     settings.save()
