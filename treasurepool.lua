@@ -6,7 +6,6 @@ addon.link      = 'https://ashitaxi.com/'
 
 require('common')
 local settings   = require('settings')
-local ffi        = require('ffi')
 local bit        = require('bit')
 local chat       = require('chat')
 
@@ -18,23 +17,9 @@ local state          = require('state')
 local layout         = require('layouts/default')
 
 ------------------------------------------------------------
--- FFI for client-to-server packets (lot 0x0041, pass 0x0042)
-------------------------------------------------------------
-pcall(ffi.cdef, [[
-    // Packet: 0x0042 - Trophy Absence (Client to Server)
-    typedef struct tp_packet_trophyabsence_c2s_t {
-        uint16_t    id: 9;
-        uint16_t    size: 7;
-        uint16_t    sync;
-        uint8_t     TrophyItemIndex;
-        uint8_t     padding00;
-    } tp_packet_trophyabsence_c2s_t;
-]])
-
-------------------------------------------------------------
 -- Default Settings
 ------------------------------------------------------------
-local default_settings = T{
+local defaultSettings = T{
     anchor = {
         x = 200,
         y = 200,
@@ -55,6 +40,8 @@ local default_settings = T{
     },
 }
 
+-- Must be kept in sync with the theme files shipped under layouts/themes/
+-- (used only to sort built-in themes after custom ones in the dropdown).
 local BUILTIN_THEMES = {
     Plain=true, xiv=true, ffxi=true,
     Window1=true, Window2=true, Window3=true, Window4=true,
@@ -83,9 +70,9 @@ local THEME_LIST = buildThemeList()
 ------------------------------------------------------------
 -- Addon State
 ------------------------------------------------------------
-local tpSettings       = default_settings
+local tpSettings       = defaultSettings
 local settingsOpen     = { false }
-local logged_in        = false
+local loggedIn         = false
 local lotDetailsSlot   = nil
 local lotDetailsOpen   = { false }
 
@@ -161,11 +148,11 @@ local dTreasurePool = {
 -- Packet Sending Helpers
 ------------------------------------------------------------
 local function sendLotPacket(slotIndex)
-    local lotValue = math.random(1, 999)
+    -- The server rolls the lot value server-side; the client does not send one
+    -- (trailing bytes are padding, per XiPackets 0x0041 / LSB 0x041_trophy_entry.cpp).
     AshitaCore:GetPacketManager():AddOutgoingPacket(0x0041, {
         0x41, 0x04, 0x00, 0x00,
-        slotIndex, 0x00,
-        bit.band(lotValue, 0xFF), bit.rshift(lotValue, 8),
+        slotIndex, 0x00, 0x00, 0x00,
     })
 end
 
@@ -197,7 +184,7 @@ local function gatherTreasureData()
             if item.WinningLot == 0 then
                 winnerName = ''
             elseif type(winnerName) ~= 'string' or string.len(winnerName) < 3 then
-                winnerName = 'Unknown'
+                winnerName = ''  -- match state.buildItemFromPacket's convention (no winner shown)
             end
 
             -- DropTime is the server Unix timestamp when the item entered the pool.
@@ -351,8 +338,8 @@ end
 -- Event: Load
 ------------------------------------------------------------
 ashita.events.register('load', 'load_cb', function()
-    tpSettings = settings.load(default_settings)
-    logged_in  = GetPlayerEntity() ~= nil
+    tpSettings = settings.load(defaultSettings)
+    loggedIn   = GetPlayerEntity() ~= nil
 
     rebuildWindow()
 
@@ -373,6 +360,10 @@ end)
 ashita.events.register('unload', 'unload_cb', function()
     lootWindow.destroy()
     state.reset()
+    ashita.events.unregister('d3d_present', 'present_cb')
+    ashita.events.unregister('mouse', 'mouse_cb')
+    ashita.events.unregister('packet_in', 'treasurepool_packet_in')
+    ashita.events.unregister('command', 'treasurepool_command')
 end)
 
 ------------------------------------------------------------
@@ -381,7 +372,7 @@ end)
 ashita.events.register('d3d_present', 'present_cb', function()
     settingsWindow.draw(tpSettings, settingsOpen, THEME_LIST, { onRebuild = rebuildWindow, onReloadLayout = reloadLayout })
 
-    if not logged_in and not settingsOpen[1] then
+    if not loggedIn and not settingsOpen[1] then
         lootWindow.update({})
         return
     end
@@ -431,13 +422,13 @@ ashita.events.register('packet_in', 'treasurepool_packet_in', function(e)
 
     -- 0x000A: zone enter — player is now logged in / zoned in
     if e.id == 0x000A then
-        logged_in = true
+        loggedIn = true
         return
     end
 
     -- 0x000B: zone leave / warp — clear stale pool immediately
     if e.id == 0x000B then
-        logged_in = false
+        loggedIn = false
         state.reset()
         return
     end
