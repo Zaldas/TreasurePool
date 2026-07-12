@@ -148,7 +148,6 @@ function uiText:color(r, g, b)
         a = r.a; b = r.b; g = r.g; r = r.r
     end
     if type(r) ~= 'number' then return end -- rejects malformed color tables (e.g. missing .a) and nil
-    if not r then return end
 
     if private[self].color.r ~= r or private[self].color.g ~= g or private[self].color.b ~= b then
         private[self].color.r = r
