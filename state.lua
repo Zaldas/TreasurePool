@@ -79,6 +79,7 @@ local memberLotItemKeys  = {}
 local lotAllQueue        = {}
 local passAllQueue       = {}
 local frameCount         = 0
+local reconcileFrame     = 0
 local cachedItems        = {}
 
 ------------------------------------------------------------
@@ -134,6 +135,39 @@ function state.pruneExpired(now)
     for i = #cachedItems, 1, -1 do
         if cachedItems[i].expiresAt < now - 30 then
             table.remove(cachedItems, i)
+        end
+    end
+end
+
+-- Clears stale winner entries when the winning member is no longer in the
+-- local player's zone. The server retracts lots on zone-out but sends no
+-- packet for it, so this is a periodic reconciliation against party memory.
+-- Throttled to run its scan once every 30 calls (mirrors the 30-frame cache
+-- refresh cadence elsewhere in the addon). Call this once per frame.
+function state.reconcileWinners()
+    reconcileFrame = reconcileFrame + 1
+    if reconcileFrame % 30 ~= 0 then return end
+
+    if #cachedItems == 0 then return end
+
+    local partyMem = AshitaCore:GetMemoryManager():GetParty()
+    if not partyMem then return end
+
+    local myZone = partyMem:GetMemberZone(0)
+    local inZone = {}
+    for i = 0, 17 do
+        if partyMem:GetMemberIsActive(i) ~= 0 and partyMem:GetMemberZone(i) == myZone then
+            local n = partyMem:GetMemberName(i)
+            if type(n) == 'string' and #n >= 3 then
+                inZone[n] = true
+            end
+        end
+    end
+
+    for _, entry in ipairs(cachedItems) do
+        if entry.winnerName ~= '' and not inZone[entry.winnerName] then
+            entry.winningLot = 0
+            entry.winnerName = ''
         end
     end
 end

@@ -898,29 +898,8 @@ ashita.events.register('d3d_present', 'present_cb', function()
     local now = os.time()
     state.pruneExpired(now)
 
-    -- Clear stale winner when they've left the zone.
-    -- Server retracts lots on zone-out but sends no packet; GetMemberIsActive
-    -- returns 0 for out-of-zone members, which is the only reliable signal we have.
-    if not settingsOpen[1] and #state.getItems() > 0 then
-        local partyMem = AshitaCore:GetMemoryManager():GetParty()
-        if partyMem then
-            local inZone = {}
-            for i = 0, 17 do
-                if partyMem:GetMemberIsActive(i) ~= 0 then
-                    local n = partyMem:GetMemberName(i)
-                    if type(n) == 'string' and #n >= 3 then
-                        inZone[n] = true
-                    end
-                end
-            end
-            for _, entry in ipairs(state.getItems()) do
-                if entry.winnerName ~= '' and not inZone[entry.winnerName] then
-                    entry.winningLot = 0
-                    entry.winnerName = ''
-                end
-            end
-        end
-    end
+    -- Clear stale winner when they've left the zone (throttled, see state.reconcileWinners).
+    if not settingsOpen[1] then state.reconcileWinners() end
 
     -- Debug mode re-generates fake data each frame (responds to debugCount changes)
     local items = settingsOpen[1] and gatherDebugData() or state.getItems()
