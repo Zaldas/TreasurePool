@@ -882,7 +882,13 @@ ashita.events.register('d3d_present', 'present_cb', function()
     state.pruneExpired(now)
 
     -- Clear stale winner when they've left the zone (throttled, see state.reconcileWinners).
-    if not settingsOpen[1] then state.reconcileWinners() end
+    -- Apply any rareOwned recomputes queued by 0x0020 packets last frame
+    -- (deferred one frame so the client has settled the packet into inventory
+    -- memory first, see state.processPendingRareRecompute).
+    if not settingsOpen[1] then
+        state.reconcileWinners()
+        state.processPendingRareRecompute()
+    end
 
     -- Debug mode re-generates fake data each frame (responds to debugCount changes)
     -- Live entries carry rareOwned directly (computed at pool-insert time in

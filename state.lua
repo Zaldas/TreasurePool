@@ -101,6 +101,11 @@ local frameCount         = 0
 local reconcileFrame     = 0
 local cachedItems        = {}
 
+-- Deferred 0x0020 rare-recompute queue (see state.processPendingRareRecompute
+-- for why this can't be computed synchronously inside handlePacketIn).
+local pendingRareRecomputeAll = false
+local pendingRareRecomputeIds = {}
+
 ------------------------------------------------------------
 -- Rare ownership
 ------------------------------------------------------------
@@ -231,6 +236,34 @@ function state.reconcileWinners()
     end
 end
 
+-- Applies rare-ownership recomputes queued by the 0x0020 handler in
+-- handlePacketIn. packet_in fires before the client applies the packet to
+-- its own inventory memory, so computeRareOwned would read stale pre-packet
+-- state if called synchronously there; queuing here and consuming on the
+-- next d3d_present frame lets the client settle the packet first.
+-- Unlike reconcileWinners, this is intentionally unthrottled: it's a cheap
+-- no-op when nothing is queued, and the whole point of deferring is minimal
+-- added latency ("next frame," not "next 30 frames"). Call this once per
+-- frame.
+function state.processPendingRareRecompute()
+    if pendingRareRecomputeAll then
+        for _, entry in ipairs(cachedItems) do
+            if entry.rareOwned then
+                entry.rareOwned = computeRareOwned(entry.itemId)
+            end
+        end
+        pendingRareRecomputeAll = false
+    end
+    if next(pendingRareRecomputeIds) then
+        for _, entry in ipairs(cachedItems) do
+            if pendingRareRecomputeIds[entry.itemId] then
+                entry.rareOwned = computeRareOwned(entry.itemId)
+            end
+        end
+        pendingRareRecomputeIds = {}
+    end
+end
+
 ------------------------------------------------------------
 -- Lot formatting
 ------------------------------------------------------------
@@ -306,9 +339,12 @@ function state.handlePacketIn(e)
         return
     end
 
-    -- 0x0020: Item Attr — an inventory item slot changed; recompute rare
-    -- ownership for any pool entries matching the affected item. Bounded
-    -- scan (at most 10 pool entries), cheap to run on every arrival.
+    -- 0x0020: Item Attr — an inventory item slot changed; queue rare
+    -- ownership recompute for any pool entries matching the affected item.
+    -- Deferred: packet_in fires before the client applies this packet to
+    -- inventory memory, so a synchronous read here would see stale
+    -- pre-packet state. Actual recompute happens next frame in
+    -- state.processPendingRareRecompute().
     if e.id == 0x0020 then
         if e.size < ffi.sizeof('tp_packet_itemattr_s2c_t') then return end
         local packet = ffi.cast('tp_packet_itemattr_s2c_t*', e.data_modified_raw)
@@ -319,17 +355,9 @@ function state.handlePacketIn(e)
             -- so the affected item can't be identified from the packet.
             -- Only previously-owned entries can flip to unowned on a
             -- removal, so re-check every entry currently flagged owned.
-            for _, entry in ipairs(cachedItems) do
-                if entry.rareOwned then
-                    entry.rareOwned = computeRareOwned(entry.itemId)
-                end
-            end
+            pendingRareRecomputeAll = true
         else
-            for _, entry in ipairs(cachedItems) do
-                if entry.itemId == itemNo then
-                    entry.rareOwned = computeRareOwned(itemNo)
-                end
-            end
+            pendingRareRecomputeIds[itemNo] = true
         end
         return
     end
@@ -446,12 +474,14 @@ function state.isPassAllActive()
 end
 
 function state.reset()
-    memberLots         = {}
-    memberLotItemKeys  = {}
-    lotAllQueue        = {}
-    passAllQueue       = {}
-    frameCount         = 0
-    cachedItems        = {}
+    memberLots              = {}
+    memberLotItemKeys       = {}
+    lotAllQueue             = {}
+    passAllQueue            = {}
+    frameCount              = 0
+    cachedItems             = {}
+    pendingRareRecomputeAll = false
+    pendingRareRecomputeIds = {}
 end
 
 function state.getMemberLots()
