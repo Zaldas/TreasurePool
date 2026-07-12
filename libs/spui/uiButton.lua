@@ -25,41 +25,41 @@ end
 -- @param layout table with pos, size, label, colors, zOrder
 -- @param engine sprite engine instance
 function uiButton:init(layout, engine)
-    self.super:init(layout)
+    if self.super:init(layout) then
+        local w = (layout and layout.size and layout.size[1]) or 44
+        local h = (layout and layout.size and layout.size[2]) or 18
+        self.width  = w
+        self.height = h
 
-    local w = (layout and layout.size and layout.size[1]) or 44
-    local h = (layout and layout.size and layout.size[2]) or 18
-    self.width  = w
-    self.height = h
+        self.colors = (layout and layout.colors) or {
+            normal   = 0xFF2A5F85,
+            hover    = 0xFF3A7FAA,
+            pressed  = 0xFF1A4060,
+            disabled = 0xFF333333,
+        }
 
-    self.colors = (layout and layout.colors) or {
-        normal   = 0xFF2A5F85,
-        hover    = 0xFF3A7FAA,
-        pressed  = 0xFF1A4060,
-        disabled = 0xFF333333,
-    }
+        self.isHover    = false
+        self.isDown     = false
+        self.btnEnabled = true
+        self.onClick    = nil
 
-    self.isHover    = false
-    self.isDown     = false
-    self.btnEnabled = true
-    self.onClick    = nil
+        -- Background image (pixel.png stretched to button size, or custom path with optional 9-slice)
+        self.bg = uiImage.new({
+            path        = (layout and layout.path) or 'layouts/assets/pixel.png',
+            sliceBorder = (layout and layout.sliceBorder) or nil,
+            size        = { w, h },
+            pos         = { 0, 0 },
+            color       = '#FFFFFFFF',
+        }, engine)
+        self:addChild(self.bg)
 
-    -- Background image (pixel.png stretched to button size, or custom path with optional 9-slice)
-    self.bg = uiImage.new({
-        path        = (layout and layout.path) or 'layouts/assets/pixel.png',
-        sliceBorder = (layout and layout.sliceBorder) or nil,
-        size        = { w, h },
-        pos         = { 0, 0 },
-        color       = '#FFFFFFFF',
-    }, engine)
-    self:addChild(self.bg)
-
-    -- Label text
-    if layout and layout.label then
-        self.label = uiText.new(layout.label)
-        self:addChild(self.label)
-    else
-        self.label = nil
+        -- Label text
+        if layout and layout.label then
+            self.label = uiText.new(layout.label)
+            self:addChild(self.label)
+        else
+            self.label = nil
+        end
     end
 end
 
