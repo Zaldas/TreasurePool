@@ -11,6 +11,9 @@ local chat = require('chat')
 
 local state = {}
 
+state.LOT_PASSED = 65535
+state.POOL_TTL   = 300
+
 ------------------------------------------------------------
 -- FFI definitions (server→client packets only)
 ------------------------------------------------------------
@@ -176,7 +179,7 @@ local function buildItemFromPacket(packet)
         lot        = packet.IsLocallyLotted,
         winningLot = packet.LootPoint,
         winnerName = winnerName,
-        expiresAt  = os.time() + 300,
+        expiresAt  = os.time() + state.POOL_TTL,
         playerName = getPlayerName(),
         -- populated by 0x00D3 lot/pass packets as they arrive
         partyLots  = {},
@@ -241,7 +244,7 @@ function state.handlePacketIn(e)
 
                     -- Record this actor's lot/pass in partyLots
                     if #actorName >= 3 then
-                        entry.partyLots[actorName] = (packet.EntryPoint < 0) and 65535 or packet.EntryPoint
+                        entry.partyLots[actorName] = (packet.EntryPoint < 0) and state.LOT_PASSED or packet.EntryPoint
                     end
 
                     -- Update local lot if this action was ours
@@ -257,12 +260,14 @@ function state.handlePacketIn(e)
         elseif judgeFlg == 2 then
             -- Inventory full notification
             local inv = AshitaCore:GetMemoryManager():GetInventory()
-            local item = inv:GetTreasurePoolItem(slotIdx)
             local itemName = 'item'
-            if item and item.ItemId > 0 then
-                local resource = AshitaCore:GetResourceManager():GetItemById(item.ItemId)
-                if resource then
-                    itemName = resource.Name[1] or 'item'
+            if inv then
+                local item = inv:GetTreasurePoolItem(slotIdx)
+                if item and item.ItemId > 0 then
+                    local resource = AshitaCore:GetResourceManager():GetItemById(item.ItemId)
+                    if resource then
+                        itemName = resource.Name[1] or 'item'
+                    end
                 end
             end
             print(chat.header('TreasurePool') .. chat.warning('Cannot obtain ' .. itemName .. ' - item lost.'))

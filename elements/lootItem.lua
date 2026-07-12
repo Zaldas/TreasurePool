@@ -200,7 +200,7 @@ function lootItem:update(entry, isHovered)
     local statusColor
     if entry.rareOwned then
         statusColor = { r = 195, g = 85,  b = 85,  a = 255 }  -- Red: already own this
-    elseif entry.lot == 65535 then
+    elseif entry.lot == state.LOT_PASSED then
         statusColor = { r = 100, g = 150, b = 220, a = 255 }  -- Blue: passed
     elseif entry.lot > 0 then
         if entry.lot == entry.winningLot then
@@ -218,7 +218,7 @@ function lootItem:update(entry, isHovered)
     if isHovered then
         if entry.rareOwned and entry.lot == 0 then
             statusStr = 'Owned'
-        elseif entry.lot == 65535 then
+        elseif entry.lot == state.LOT_PASSED then
             statusStr = 'Passed'
         elseif entry.lot > 0 then
             statusStr = state.formatLot(entry.lot) .. ': ' .. playerName
@@ -226,7 +226,7 @@ function lootItem:update(entry, isHovered)
     else
         if entry.winningLot > 0 and entry.winnerName ~= '' then
             statusStr = state.formatLot(entry.winningLot) .. ': ' .. entry.winnerName
-        elseif entry.lot == 65535 then
+        elseif entry.lot == state.LOT_PASSED then
             statusStr = 'Passed'
         elseif entry.rareOwned then
             statusStr = 'Owned'
@@ -236,7 +236,7 @@ function lootItem:update(entry, isHovered)
     self.statusText:color(statusColor)
 
     local canAct = private[self].buttonsEnabled and isHovered
-    if not canAct or entry.lot == 65535 then
+    if not canAct or entry.lot == state.LOT_PASSED then
         -- Not hovered, or already passed: no buttons
         self.lotBtn:hide(utils.VIS_TOKEN)
         self.passBtn:hide(utils.VIS_TOKEN)
@@ -257,7 +257,7 @@ function lootItem:update(entry, isHovered)
     self.lotBtn:update()
     self.passBtn:update()
 
-    local barValue = math.max(0, math.min(1, remaining / 300))
+    local barValue = math.max(0, math.min(1, remaining / state.POOL_TTL))
     self.timerBar:setValue(barValue)
     local barColor = d3dToRgba(timerD3D)
     barColor.a = 128

@@ -114,7 +114,7 @@ local function buildPartyLotsForSlot(slotIdx)
     for name, info in pairs(memberLots) do
         if type(name) == 'string' and #name >= 3 and type(info) == 'table' then
             if info.passed then
-                result[name] = 65535
+                result[name] = state.LOT_PASSED
             elseif type(info.lot) == 'number' then
                 result[name] = info.lot
             end
@@ -160,7 +160,7 @@ local dPartyLots = {
     ['Matsuno']  = 543,
     ['Jorin']    = 821,
     ['Beatrice'] = 412,
-    ['George']   = 65535,  -- passed
+    ['George']   = state.LOT_PASSED,  -- passed
     ['Zalyx']    = 765,
 }
 
@@ -172,7 +172,7 @@ local dTreasurePool = {
     { itemId = 17707, name = "Martial Anelace",    lot = 0,     lotWinner = "Beatrice", winningLot = 412, timeToLive = 35  }, -- (neither)
     { itemId = 12818, name = "Byakko's Haidate",   lot = 765,   lotWinner = "You",      winningLot = 765, timeToLive = 250 }, -- Rare+Ex
     { itemId = 17707, name = "Martial Anelace",    lot = 312,   lotWinner = "Matsuno",  winningLot = 543, timeToLive = 200 }, -- (neither)
-    { itemId = 14488, name = "Homam Corazza",      lot = 65535, lotWinner = "",         winningLot = 0,   timeToLive = 270 }, -- Rare+Ex
+    { itemId = 14488, name = "Homam Corazza",      lot = state.LOT_PASSED, lotWinner = "",         winningLot = 0,   timeToLive = 270 }, -- Rare+Ex
     -- Usables (type 7)
     { itemId = 4247,  name = "Miratete's Memoirs", lot = 0,     lotWinner = "",         winningLot = 0,   timeToLive = 200 }, -- Rare+Ex
     -- Items catch-all (type 1)
@@ -207,6 +207,7 @@ end
 local function gatherTreasureData()
     local result     = {}
     local inv        = AshitaCore:GetMemoryManager():GetInventory()
+    if not inv then return result end
     local resMgr     = AshitaCore:GetResourceManager()
     local playerName = getPlayerName()
 
@@ -225,8 +226,8 @@ local function gatherTreasureData()
 
             -- DropTime is the server Unix timestamp when the item entered the pool.
             -- TimeToLive is in an unknown unit (not seconds), so derive expiry from DropTime.
-            local dropRem  = item.DropTime + 300 - os.time()
-            local expiresAt = (dropRem >= 0 and dropRem <= 310) and (item.DropTime + 300) or (os.time() + 300)
+            local dropRem  = item.DropTime + state.POOL_TTL - os.time()
+            local expiresAt = (dropRem >= 0 and dropRem <= 310) and (item.DropTime + state.POOL_TTL) or (os.time() + state.POOL_TTL)
 
             result[#result + 1] = {
                 slot       = i,
@@ -281,6 +282,11 @@ local function wireCallbacks()
                 if entry.rareOwned then return end
                 break
             end
+        end
+
+        if isInventoryFull() then
+            print(chat.header('TreasurePool') .. chat.warning('Inventory full - cannot lot.'))
+            return
         end
 
         sendLotPacket(slot)
@@ -624,7 +630,7 @@ local function buildLotRow(name, lot, winningLot)
     if lot == nil then
         statusStr   = 'Pending'
         statusColor = { 0.5, 0.5, 0.5, 1.0 }
-    elseif lot == 65535 then
+    elseif lot == state.LOT_PASSED then
         statusStr   = 'Pass'
         statusColor = { 0.4, 0.6, 0.9, 1.0 }
     else
