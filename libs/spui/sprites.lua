@@ -1,6 +1,6 @@
 --[[
     spui/sprites.lua
-    Instanced sprite engine factory for PetsReborn.
+    Instanced sprite engine factory for TreasurePool.
     Each newEngine() call returns an isolated sprite context.
     A single global D3DXSprite and imageCache are shared across all engines.
 ]]
@@ -44,7 +44,7 @@ pcall(ffi.cdef, [[
 local function createD3DSprite()
     local ptr = ffi.new('ID3DXSprite*[1]')
     if ffi.C.D3DXCreateSprite(d3dDevice, ptr) ~= ffi.C.S_OK then
-        error('[PetsReborn] Failed to create D3DXSprite')
+        error('[TreasurePool] Failed to create D3DXSprite')
     end
     return d3d8.gc_safe_release(ffi.cast('ID3DXSprite*', ptr[0]))
 end
@@ -134,7 +134,7 @@ local function renderNineSlice(spr, v)
 end
 
 -- Global render dispatcher
-ashita.events.register('d3d_present', '__petsreborn_spui_present_cb', function()
+ashita.events.register('d3d_present', '__treasurepool_spui_present_cb', function()
     if d3dSprite ~= nil then
         d3dSprite:Begin()
         for _, eng in ipairs(engines) do
