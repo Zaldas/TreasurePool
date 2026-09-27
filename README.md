@@ -49,7 +49,7 @@ Each row in the pool shows:
 
 ### Lot Details Popup
 
-Click any item row (when **Show Lot Details** is enabled) to open a popup showing all party and alliance members and their current status for that item.
+Click any item row (when **Show lot details** is enabled) to open a popup showing all party and alliance members and their current status for that item.
 
 | Status | Color |
 |--------|-------|
@@ -80,19 +80,19 @@ Open with `/treasurepool`.
 | **Theme** | Visual style for the window background. See [Themes](#themes). |
 | **Lock position** | Disables dragging the window. |
 | **Collapsible header** | Shows a collapse arrow in the header. Click it to hide all rows and show only the title bar. State is saved between sessions. |
-| **Custom Scale** | Override the auto-detected UI scale. Drag the slider between ×0.25 and ×2.5. Auto-detect uses screen height ÷ 1440. |
+| **Custom scale** | Override the auto-detected UI scale. Drag the slider between ×0.25 and ×2.5. Auto-detect uses screen height ÷ 1440. |
 | **Items** *(Debug)* | Number of fake items to show when the settings window is open (1–10). Used for previewing layout and theme changes without being in a live loot scenario. |
-| **Reload Layout** | Hot-reloads `layouts/default.lua` and all theme files without restarting the addon. |
+| **Reload layout** | Hot-reloads `layouts/default.lua` and all theme files without restarting the addon. |
 
 ### Interactions Tab
 
 | Setting | Description |
 |---------|-------------|
-| **Show Item Tooltip** | Enables hover tooltips showing item stats and description. |
+| **Show item tooltip** | Enables hover tooltips showing item stats and description. |
 | — Gear | Include tooltips for weapons and armor. |
 | — Usables | Include tooltips for consumables (food, medicines, scrolls, etc.). |
 | — Items | Include tooltips for everything else (seals, crystals, key items, etc.). |
-| **Show Lot Details** | Enables the click-to-open lot details popup per item row. |
+| **Show lot details** | Enables the click-to-open lot details popup per item row. |
 
 ---
 
@@ -102,7 +102,7 @@ The **Theme** dropdown in settings lists all available themes. Custom themes app
 
 **Built-in themes:** `Plain`, `xiv`, `ffxi`, `Window1` – `Window8`
 
-**Custom themes:** Drop a `.lua` file into `layouts/themes/`. The filename (without `.lua`) becomes the theme name. Click **Reload Layout** to pick it up without restarting. See existing theme files for the definition format.
+**Custom themes:** Drop a `.lua` file into `layouts/themes/`. The filename (without `.lua`) becomes the theme name. Click **Reload layout** to pick it up without restarting. See existing theme files for the definition format.
 
 ---
 

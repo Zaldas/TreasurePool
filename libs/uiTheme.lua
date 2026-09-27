@@ -5,8 +5,16 @@ local M = {}
 
 M.accent = { 0.36, 0.66, 1.00 }
 
+M.indent    = 6
+M.subIndent = 10
+
 local function rgba(c, a)
     return { c[1], c[2], c[3], a }
+end
+
+local function availWidth()
+    local avail = imgui.GetContentRegionAvail()
+    return type(avail) == 'table' and avail[1] or avail
 end
 
 M.palette = {
@@ -132,12 +140,24 @@ function M.header(text, helpText)
     imgui.Spacing()
 end
 
+function M.comboWidth()
+    return math.floor(availWidth() * 0.65)
+end
+
 function M.button(label, width, kind)
     local colors = 3
     if kind == 'primary' then
         imgui.PushStyleColor(ImGuiCol_Button,        { 0.24, 0.42, 0.78, 1.00 })
         imgui.PushStyleColor(ImGuiCol_ButtonHovered, { 0.30, 0.52, 0.92, 1.00 })
         imgui.PushStyleColor(ImGuiCol_ButtonActive,  { 0.20, 0.34, 0.66, 1.00 })
+    elseif kind == 'active' then
+        imgui.PushStyleColor(ImGuiCol_Button,        { 0.70, 0.45, 0.05, 1.00 })
+        imgui.PushStyleColor(ImGuiCol_ButtonHovered, { 0.80, 0.55, 0.10, 1.00 })
+        imgui.PushStyleColor(ImGuiCol_ButtonActive,  { 0.55, 0.35, 0.03, 1.00 })
+    elseif kind == 'danger' then
+        imgui.PushStyleColor(ImGuiCol_Button,        { 0.55, 0.20, 0.20, 1.00 })
+        imgui.PushStyleColor(ImGuiCol_ButtonHovered, { 0.70, 0.28, 0.28, 1.00 })
+        imgui.PushStyleColor(ImGuiCol_ButtonActive,  { 0.40, 0.15, 0.15, 1.00 })
     else
         imgui.PushStyleColor(ImGuiCol_Button,        { 0.00, 0.00, 0.00, 0.00 })
         imgui.PushStyleColor(ImGuiCol_ButtonHovered, { 1.00, 1.00, 1.00, 0.12 })
@@ -148,6 +168,14 @@ function M.button(label, width, kind)
     local clicked = imgui.Button(label, { width, 0 })
     imgui.PopStyleColor(colors)
     return clicked
+end
+
+-- Centers on the full content width; call it outside any Indent.
+function M.centeredButton(label, kind)
+    local availW = availWidth()
+    local btnW   = math.floor(availW * 0.80)
+    imgui.SetCursorPosX(imgui.GetCursorPosX() + math.floor((availW - btnW) * 0.5))
+    return M.button(label, btnW, kind)
 end
 
 return M
