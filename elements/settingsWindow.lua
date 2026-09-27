@@ -1,44 +1,9 @@
 local imgui      = require('imgui')
 local settings   = require('settings')
 local lootWindow = require('elements/lootWindow')
+local uiTheme    = require('libs/uiTheme')
 
 local settingsWindow = {}
-
-------------------------------------------------------------
--- Settings Window helpers
-------------------------------------------------------------
-local function drawGradientHeader(text)
-    local drawlist = imgui.GetWindowDrawList()
-    local avail    = imgui.GetContentRegionAvail()
-    local availW   = type(avail) == 'table' and avail[1] or avail
-    local x, y     = imgui.GetCursorScreenPos()
-    local lineH    = imgui.GetTextLineHeightWithSpacing()
-    local cL       = imgui.GetColorU32({ 0.25, 0.40, 0.85, 1.00 })
-    local cR       = imgui.GetColorU32({ 0.25, 0.40, 0.85, 0.00 })
-    drawlist:AddRectFilledMultiColor({ x, y }, { x + availW * 0.75, y + lineH }, cL, cR, cR, cL)
-    imgui.SetCursorScreenPos({ x + 4, y + 2 })
-    imgui.Text(text)
-    local _, newY = imgui.GetCursorScreenPos()
-    imgui.SetCursorScreenPos({ x, newY })
-    imgui.Spacing()
-end
-
-local function styledButton(label, width, isPrimary)
-    imgui.PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0)
-    if isPrimary then
-        imgui.PushStyleColor(ImGuiCol_Button,        { 0.25, 0.40, 0.85, 1.00 })
-        imgui.PushStyleColor(ImGuiCol_ButtonHovered, { 0.30, 0.48, 0.95, 1.00 })
-        imgui.PushStyleColor(ImGuiCol_ButtonActive,  { 0.18, 0.32, 0.70, 1.00 })
-    else
-        imgui.PushStyleColor(ImGuiCol_Button,        { 0.00, 0.00, 0.00, 0.00 })
-        imgui.PushStyleColor(ImGuiCol_ButtonHovered, { 1.00, 1.00, 1.00, 0.12 })
-        imgui.PushStyleColor(ImGuiCol_ButtonActive,  { 1.00, 1.00, 1.00, 0.20 })
-    end
-    local clicked = imgui.Button(label, { width, 0 })
-    imgui.PopStyleColor(3)
-    imgui.PopStyleVar(1)
-    return clicked
-end
 
 ------------------------------------------------------------
 -- Settings Window (ImGui)
@@ -47,9 +12,7 @@ function settingsWindow.draw(tpSettings, settingsOpen, themeList, callbacks)
     if not settingsOpen[1] then return end
 
     local indent = 6
-    imgui.PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0)
-    imgui.SetNextWindowSizeConstraints({ 270, 0 }, { 270, 9999 })
-    if imgui.Begin('TreasurePool.' .. addon.version, settingsOpen, ImGuiWindowFlags_AlwaysAutoResize) then
+    local function drawBody()
         local avail  = imgui.GetContentRegionAvail()
         local availW = type(avail) == 'table' and avail[1] or avail
 
@@ -60,7 +23,7 @@ function settingsWindow.draw(tpSettings, settingsOpen, themeList, callbacks)
             ----------------------------------------------------
             if imgui.BeginTabItem('Display') then
                 imgui.Spacing()
-                drawGradientHeader('Display')
+                uiTheme.header('Display')
 
                 imgui.SetCursorPosX(imgui.GetCursorPosX() + indent)
                 local themeIdx = { 0 }
@@ -111,7 +74,7 @@ function settingsWindow.draw(tpSettings, settingsOpen, themeList, callbacks)
                 end
 
                 imgui.Spacing()
-                drawGradientHeader('Debug')
+                uiTheme.header('Debug')
 
                 imgui.SetCursorPosX(imgui.GetCursorPosX() + indent)
                 local cnt = { tpSettings.debugCount }
@@ -133,7 +96,7 @@ function settingsWindow.draw(tpSettings, settingsOpen, themeList, callbacks)
                 local btnW   = math.floor(availW * 0.80)
                 local btnPad = math.floor((availW - btnW) * 0.5)
                 imgui.SetCursorPosX(imgui.GetCursorPosX() + btnPad)
-                if styledButton('Reload Layout', btnW, false) then
+                if uiTheme.button('Reload Layout', btnW, 'ghost') then
                     callbacks.onReloadLayout()
                 end
 
@@ -145,6 +108,7 @@ function settingsWindow.draw(tpSettings, settingsOpen, themeList, callbacks)
             ----------------------------------------------------
             if imgui.BeginTabItem('Interactions') then
                 imgui.Spacing()
+                uiTheme.header('Item Tooltip')
 
                 local tt = tpSettings.tooltip
                 local ttEnabled = { tt.enabled }
@@ -154,55 +118,37 @@ function settingsWindow.draw(tpSettings, settingsOpen, themeList, callbacks)
                     tpSettings.tooltip.enabled = ttEnabled[1]
                     settings.save()
                 end
-                imgui.SameLine()
-                imgui.TextDisabled('(?)')
-                if imgui.IsItemHovered() then
-                    imgui.BeginTooltip()
-                    imgui.PushTextWrapPos(imgui.GetFontSize() * 18)
-                    imgui.TextUnformatted('Hover over an item in the loot pool to see its stats and description.')
-                    imgui.PopTextWrapPos()
-                    imgui.EndTooltip()
-                end
+                uiTheme.helpMarker('Hover over an item in the loot pool to see its stats and description.')
 
                 if tt.enabled then
                     imgui.Spacing()
 
                     local subIndent = indent + 10
-                    local function ttHint(text)
-                        imgui.SameLine()
-                        imgui.TextDisabled('(?)')
-                        if imgui.IsItemHovered() then
-                            imgui.BeginTooltip()
-                            imgui.TextUnformatted(text)
-                            imgui.EndTooltip()
-                        end
-                    end
 
                     imgui.SetCursorPosX(imgui.GetCursorPosX() + subIndent)
                     local ttGear = { tt.gear }
                     if imgui.Checkbox('Gear##tt', ttGear) then
                         tpSettings.tooltip.gear = ttGear[1]; settings.save()
                     end
-                    ttHint('Weapons and armor.')
+                    uiTheme.helpMarker('Weapons and armor.')
 
                     imgui.SetCursorPosX(imgui.GetCursorPosX() + subIndent)
                     local ttUsables = { tt.usables }
                     if imgui.Checkbox('Usables##tt', ttUsables) then
                         tpSettings.tooltip.usables = ttUsables[1]; settings.save()
                     end
-                    ttHint('Consumable items: food, medicines, scrolls, meds, etc.')
+                    uiTheme.helpMarker('Consumable items: food, medicines, scrolls, meds, etc.')
 
                     imgui.SetCursorPosX(imgui.GetCursorPosX() + subIndent)
                     local ttItems = { tt.items }
                     if imgui.Checkbox('Items##tt', ttItems) then
                         tpSettings.tooltip.items = ttItems[1]; settings.save()
                     end
-                    ttHint('Everything else: seals, crystals, key items, etc.')
+                    uiTheme.helpMarker('Everything else: seals, crystals, key items, etc.')
                 end
 
                 imgui.Spacing()
-                imgui.Separator()
-                imgui.Spacing()
+                uiTheme.header('Lot Details')
 
                 imgui.SetCursorPosX(imgui.GetCursorPosX() + indent)
                 local ttLD = { tt.lotDetails }
@@ -210,13 +156,7 @@ function settingsWindow.draw(tpSettings, settingsOpen, themeList, callbacks)
                     tpSettings.tooltip.lotDetails = ttLD[1]
                     settings.save()
                 end
-                imgui.SameLine()
-                imgui.TextDisabled('(?)')
-                if imgui.IsItemHovered() then
-                    imgui.BeginTooltip()
-                    imgui.TextUnformatted('Left-clicking an item row opens a window\nshowing all party lot and pass results.')
-                    imgui.EndTooltip()
-                end
+                uiTheme.helpMarker('Left-clicking an item row opens a window\nshowing all party lot and pass results.')
 
                 imgui.Spacing()
                 imgui.EndTabItem()
@@ -225,8 +165,16 @@ function settingsWindow.draw(tpSettings, settingsOpen, themeList, callbacks)
             imgui.EndTabBar()
         end
     end
+
+    local n = uiTheme.push()
+    imgui.SetNextWindowSizeConstraints({ 270, 0 }, { 270, 9999 })
+    local ok, err = true, nil
+    if imgui.Begin('TreasurePool.' .. addon.version, settingsOpen, ImGuiWindowFlags_AlwaysAutoResize) then
+        ok, err = pcall(drawBody)
+    end
     imgui.End()
-    imgui.PopStyleVar(1)
+    uiTheme.pop(n)
+    if not ok then error(err, 0) end
 end
 
 return settingsWindow

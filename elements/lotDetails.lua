@@ -1,5 +1,6 @@
 local imgui = require('imgui')
 local state = require('state')
+local uiTheme = require('libs/uiTheme')
 
 local lotDetails = {}
 
@@ -93,10 +94,30 @@ function lotDetails.draw(items, lotDetailsSlot, lotDetailsOpen)
 
     local rowH   = imgui.GetTextLineHeightWithSpacing()
 
-    imgui.SetNextWindowSizeConstraints({ 200, 80 }, { 200, 2000 })
-    imgui.SetNextWindowSize({ 200, rowH * 12 }, ImGuiCond_FirstUseEver)
-    imgui.PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0)
-    if imgui.Begin('Lot Details##lotdetails', lotDetailsOpen) then
+    local function renderSections()
+        local first = true
+        for i = 1, 3 do
+            if #parties[i] > 0 then
+                if not first then
+                    imgui.Spacing()
+                    imgui.Separator()
+                    imgui.Spacing()
+                end
+                renderRows(parties[i])
+                first = false
+            end
+        end
+        if #extraRows > 0 then
+            if not first then
+                imgui.Spacing()
+                imgui.Separator()
+                imgui.Spacing()
+            end
+            renderRows(extraRows)
+        end
+    end
+
+    local function drawBody()
         imgui.TextColored({ 1.0, 0.85, 0.2, 1.0 }, entry.name)
         imgui.Separator()
         imgui.Spacing()
@@ -105,31 +126,22 @@ function lotDetails.draw(items, lotDetailsSlot, lotDetailsOpen)
             imgui.TextDisabled('No party members found.')
         else
             imguiBeginChild('##lotscroll', { 0, 0 }, false)
-            local first = true
-            for i = 1, 3 do
-                if #parties[i] > 0 then
-                    if not first then
-                        imgui.Spacing()
-                        imgui.Separator()
-                        imgui.Spacing()
-                    end
-                    renderRows(parties[i])
-                    first = false
-                end
-            end
-            if #extraRows > 0 then
-                if not first then
-                    imgui.Spacing()
-                    imgui.Separator()
-                    imgui.Spacing()
-                end
-                renderRows(extraRows)
-            end
+            local ok, err = pcall(renderSections)
             imgui.EndChild()
+            if not ok then error(err, 0) end
         end
     end
+
+    local n = uiTheme.push()
+    imgui.SetNextWindowSizeConstraints({ 200, 80 }, { 200, 2000 })
+    imgui.SetNextWindowSize({ 200, rowH * 12 }, ImGuiCond_FirstUseEver)
+    local ok, err = true, nil
+    if imgui.Begin('Lot Details##lotdetails', lotDetailsOpen) then
+        ok, err = pcall(drawBody)
+    end
     imgui.End()
-    imgui.PopStyleVar(1)
+    uiTheme.pop(n)
+    if not ok then error(err, 0) end
 end
 
 return lotDetails
