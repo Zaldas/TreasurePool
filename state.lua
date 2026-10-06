@@ -203,9 +203,19 @@ function state.pruneExpired(now)
     end
 end
 
+-- Zones whose treasure pool is shared by everyone in the zone rather than the
+-- alliance. The server flag isn't visible to the client, so these are by ID.
+local ZONE_POOL_ZONES = {
+    [39]  = true, [40]  = true, [41]  = true, [42]  = true,   -- Dynamis-Valkurm/Buburimu/Qufim/Tavnazia
+    [134] = true, [135] = true,                               -- Dynamis-Beaucedine/Xarcabard
+    [185] = true, [186] = true, [187] = true, [188] = true,   -- Dynamis-San d'Oria/Bastok/Windurst/Jeuno
+}
+
 -- Clears stale winner entries when the winning member is no longer in the
 -- local player's zone. The server retracts lots on zone-out but sends no
 -- packet for it, so this is a periodic reconciliation against party memory.
+-- In zone-pool zones, winners outside the alliance have no zone data and are
+-- kept; only alliance members seen in another zone are cleared.
 -- Throttled to run its scan once every 30 calls (mirrors the 30-frame cache
 -- refresh cadence elsewhere in the addon). Call this once per frame.
 function state.reconcileWinners()
@@ -218,20 +228,34 @@ function state.reconcileWinners()
     if not partyMem then return end
 
     local myZone = partyMem:GetMemberZone(0)
-    local inZone = {}
+    local inZone, outOfZone = {}, {}
     for i = 0, 17 do
-        if partyMem:GetMemberIsActive(i) ~= 0 and partyMem:GetMemberZone(i) == myZone then
+        if partyMem:GetMemberIsActive(i) ~= 0 then
             local n = partyMem:GetMemberName(i)
             if type(n) == 'string' and #n >= 3 then
-                inZone[n] = true
+                if partyMem:GetMemberZone(i) == myZone then
+                    inZone[n] = true
+                else
+                    outOfZone[n] = true
+                end
             end
         end
     end
 
+    local zonePool = ZONE_POOL_ZONES[myZone] == true
     for _, entry in ipairs(cachedItems) do
-        if entry.winnerName ~= '' and not inZone[entry.winnerName] then
-            entry.winningLot = 0
-            entry.winnerName = ''
+        local name = entry.winnerName
+        if name ~= '' then
+            local stale
+            if zonePool then
+                stale = outOfZone[name] == true
+            else
+                stale = not inZone[name]
+            end
+            if stale then
+                entry.winningLot = 0
+                entry.winnerName = ''
+            end
         end
     end
 end
