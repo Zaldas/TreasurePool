@@ -297,4 +297,13 @@ function M.clearCache()
     iconCache  = {}
 end
 
+-- Unload teardown. Call after every gdifonts object is destroyed: the dispatcher above
+-- calls gdi:render(), so it is unregistered before the font manager is released.
+function M.dispose()
+    ashita.events.unregister('d3d_present', '__treasurepool_spui_present_cb')
+    engines = {}
+    M.clearCache()
+    gdi:destroy_interface()
+end
+
 return M

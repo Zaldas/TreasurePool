@@ -4,16 +4,6 @@ local uiTheme = require('libs/uiTheme')
 
 local lotDetails = {}
 
--- Ashita 4.3 changed BeginChild: boolean cflags replaced with ImGuiChildFlags_* enum.
--- Wrap to handle both branches transparently.
-local _newChildFlags = ImGuiChildFlags_None ~= nil
-local function imguiBeginChild(id, size, borders)
-    if _newChildFlags then
-        return imgui.BeginChild(id, size, borders and ImGuiChildFlags_Borders or ImGuiChildFlags_None)
-    end
-    return imgui.BeginChild(id, size, borders)
-end
-
 local function buildLotRow(name, lot, winningLot)
     local statusStr, statusColor
     if lot == nil then
@@ -125,7 +115,7 @@ function lotDetails.draw(items, lotDetailsSlot, lotDetailsOpen)
         if not hasAny then
             imgui.TextDisabled('No party members found.')
         else
-            imguiBeginChild('##lotscroll', { 0, 0 }, false)
+            imgui.BeginChild('##lotscroll', { 0, 0 }, ImGuiChildFlags_None)
             local ok, err = pcall(renderSections)
             imgui.EndChild()
             if not ok then error(err, 0) end

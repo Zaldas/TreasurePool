@@ -5,9 +5,9 @@
 -- server-to-client packets, plus lot/pass queue draining.
 ------------------------------------------------------------
 
-local ffi  = require('ffi')
-local bit  = require('bit')
-local chat = require('chat')
+local ffi    = require('ffi')
+local bit    = require('bit')
+local socket = require('socket')
 
 local state = {}
 
@@ -92,12 +92,10 @@ pcall(ffi.cdef, [[
 ------------------------------------------------------------
 -- State tables
 ------------------------------------------------------------
--- [slotIdx] = { [name] = { lot=value, passed=bool } }
-local memberLots         = {}
-local memberLotItemKeys  = {}
+-- Queue entries are { slot = slotIdx, itemKey = itemKey }.
 local lotAllQueue        = {}
 local passAllQueue       = {}
-local frameCount         = 0
+local lastDrainAt        = 0
 local reconcileFrame     = 0
 local cachedItems        = {}
 
@@ -139,14 +137,56 @@ local function computeRareOwned(itemId)
     return false
 end
 
+-- Zones whose treasure pool is shared by everyone in the zone rather than the
+-- alliance. The server flag isn't visible to the client, so these are by ID.
+local ZONE_POOL_ZONES = {
+    [39]  = true, [40]  = true, [41]  = true, [42]  = true,   -- Dynamis-Valkurm/Buburimu/Qufim/Tavnazia
+    [134] = true, [135] = true,                               -- Dynamis-Beaucedine/Xarcabard
+    [185] = true, [186] = true, [187] = true, [188] = true,   -- Dynamis-San d'Oria/Bastok/Windurst/Jeuno
+}
+
 ------------------------------------------------------------
 -- Cache helpers
 ------------------------------------------------------------
+-- Identifies one pool occupant: 0x00D2 TrophyItemNo and StartTime.
+function state.makeItemKey(itemId, startTime)
+    return string.format('%d:%d', itemId, startTime)
+end
+
+-- Sets winningLot/winnerName to the highest non-pass lot in entry.partyLots.
+local function recomputeWinner(entry)
+    local bestName, bestLot = '', 0
+    for name, lot in pairs(entry.partyLots) do
+        if lot ~= state.LOT_PASSED and lot > bestLot then
+            bestName, bestLot = name, lot
+        end
+    end
+    entry.winningLot = bestLot
+    entry.winnerName = bestName
+end
+
+-- A same-itemKey rebroadcast carries no lot data, so the cached entry is kept.
+-- Outside zone pools the server's pool reload erases only the recipient's own lot.
 function state.insertSorted(item)
-    -- Remove any existing entry for this slot, preserving accumulated partyLots.
     for i = #cachedItems, 1, -1 do
-        if cachedItems[i].slot == item.slot then
-            item.partyLots = cachedItems[i].partyLots or {}
+        local old = cachedItems[i]
+        if old.slot == item.slot then
+            if old.itemKey ~= nil and old.itemKey == item.itemKey then
+                old.rareOwned  = item.rareOwned
+                old.playerName = item.playerName
+                local party = AshitaCore:GetMemoryManager():GetParty()
+                local zone  = party and party:GetMemberZone(0)
+                if not ZONE_POOL_ZONES[zone] then
+                    local selfName  = item.playerName
+                    local wasWinner = old.winnerName == selfName
+                    old.lot = 0
+                    if old.partyLots[selfName] ~= nil or wasWinner then
+                        old.partyLots[selfName] = nil
+                        recomputeWinner(old)
+                    end
+                end
+                return
+            end
             table.remove(cachedItems, i)
             break
         end
@@ -202,14 +242,6 @@ function state.pruneExpired(now)
         end
     end
 end
-
--- Zones whose treasure pool is shared by everyone in the zone rather than the
--- alliance. The server flag isn't visible to the client, so these are by ID.
-local ZONE_POOL_ZONES = {
-    [39]  = true, [40]  = true, [41]  = true, [42]  = true,   -- Dynamis-Valkurm/Buburimu/Qufim/Tavnazia
-    [134] = true, [135] = true,                               -- Dynamis-Beaucedine/Xarcabard
-    [185] = true, [186] = true, [187] = true, [188] = true,   -- Dynamis-San d'Oria/Bastok/Windurst/Jeuno
-}
 
 -- Clears stale winner entries when the winning member is no longer in the
 -- local player's zone. The server retracts lots on zone-out but sends no
@@ -324,6 +356,7 @@ local function buildItemFromPacket(packet)
 
     return {
         slot       = slotIdx,
+        itemKey    = state.makeItemKey(itemId, packet.StartTime),
         itemId     = itemId,
         name       = (resource and resource.Name[1]) or 'Unknown',
         -- IsLocallyLotted is a boolean gate (0/1); the actual lot value is
@@ -334,30 +367,17 @@ local function buildItemFromPacket(packet)
         expiresAt  = os.time() + state.POOL_TTL,
         playerName = getPlayerName(),
         -- populated by 0x00D3 lot/pass packets as they arrive
+        -- (insertSorted keeps the cached entry on a same-itemKey rebroadcast)
         partyLots  = {},
     }
 end
 
 function state.handlePacketIn(e)
-    -- 0x00D2: Trophy List — clear member lots for this slot only when the item changes
+    -- 0x00D2: Trophy List — insert or refresh a pool slot, or clear it
     if e.id == 0x00D2 then
         if e.size < ffi.sizeof('tp_packet_trophylist_s2c_t') then return end
         local packet = ffi.cast('tp_packet_trophylist_s2c_t*', e.data_modified_raw)
         local slotIdx = packet.TrophyItemIndex
-        -- Same Gold==0 guard as the cache removal below: TrophyItemNo == 0
-        -- with nonzero Gold is a gold-only drop on retail, where
-        -- TrophyItemIndex may be stale/junk — only treat it as a slot
-        -- removal when Gold is also 0. Otherwise leave memberLots untouched.
-        if packet.TrophyItemNo == 0 and packet.Gold == 0 then
-            memberLots[slotIdx] = nil
-            memberLotItemKeys[slotIdx] = nil
-        elseif packet.TrophyItemNo ~= 0 then
-            local itemKey = tostring(packet.TrophyItemNo) .. ':' .. tostring(packet.StartTime)
-            if memberLotItemKeys[slotIdx] ~= itemKey then
-                memberLots[slotIdx] = {}
-                memberLotItemKeys[slotIdx] = itemKey
-            end
-        end
 
         -- TrophyItemNo == 0 with nonzero Gold is a gold-only drop on retail,
         -- where TrophyItemIndex may be stale/junk — only treat it as a slot
@@ -395,7 +415,7 @@ function state.handlePacketIn(e)
         return
     end
 
-    -- 0x00D3: Trophy Solution — track member lots, handle inventory full
+    -- 0x00D3: Trophy Solution — track member lots, remove resolved items
     if e.id == 0x00D3 then
         if e.size < ffi.sizeof('tp_packet_trophysolution_s2c_t') then return end
         local packet = ffi.cast('tp_packet_trophysolution_s2c_t*', e.data_modified_raw)
@@ -406,18 +426,7 @@ function state.handlePacketIn(e)
         local actorName = ffi.string(packet.sLootName2, 16):match('^[^%z]*')
 
         if judgeFlg == 0 then
-            -- Someone lotted or passed
-            if not memberLots[slotIdx] then
-                memberLots[slotIdx] = {}
-            end
-            if actorName ~= '' then
-                if packet.EntryPoint < 0 then
-                    memberLots[slotIdx][actorName] = { lot = nil, passed = true }
-                else
-                    memberLots[slotIdx][actorName] = { lot = packet.EntryPoint, passed = false }
-                end
-            end
-
+            -- Someone lotted or passed.
             -- Update existing cache entry in-place (no re-sort; expiresAt unchanged)
             for _, entry in ipairs(cachedItems) do
                 if entry.slot == slotIdx then
@@ -438,30 +447,10 @@ function state.handlePacketIn(e)
                     break
                 end
             end
-        elseif judgeFlg == 1 then
-            -- Item awarded — remove from pool. Also clear member lot state so
-            -- a same-second re-drop of an identical item into this slot can't
-            -- inherit the previous occupant's lot/pass entries.
-            memberLots[slotIdx] = nil
-            memberLotItemKeys[slotIdx] = nil
-            state.removeFromCache(slotIdx)
-        elseif judgeFlg == 2 then
-            -- Inventory full notification
-            local inv = AshitaCore:GetMemoryManager():GetInventory()
-            local itemName = 'item'
-            if inv then
-                local item = inv:GetTreasurePoolItem(slotIdx)
-                if item and item.ItemId > 0 then
-                    local resource = AshitaCore:GetResourceManager():GetItemById(item.ItemId)
-                    if resource then
-                        itemName = resource.Name[1] or 'item'
-                    end
-                end
-            end
-            print(chat.header('TreasurePool') .. chat.warning('Cannot obtain ' .. itemName .. ' - item lost.'))
-            state.removeFromCache(slotIdx)
-        elseif judgeFlg >= 3 then
-            -- Retail JudgeFlg 3+ silently clears the pool slot (no message)
+        elseif judgeFlg >= 1 then
+            -- JudgeFlg 1: item awarded.
+            -- JudgeFlg 2: item not awarded (lost); the client prints its own message.
+            -- Retail JudgeFlg 3+ silently clears the pool slot (no message).
             state.removeFromCache(slotIdx)
         end
         return
@@ -472,39 +461,70 @@ end
 -- Queue management
 ------------------------------------------------------------
 
--- Called each frame. Drains one item from each queue every 3 frames.
--- sendLot(slot) and sendPass(slot) are callbacks from treasurepool.lua.
-function state.drainQueues(sendLot, sendPass)
-    frameCount = frameCount + 1
-    if frameCount % 3 ~= 0 then return end
+-- Minimum seconds between queued lot/pass packets.
+local DRAIN_INTERVAL = 0.05
 
-    if #lotAllQueue > 0 then
-        local s = table.remove(lotAllQueue, 1)
-        if sendLot then sendLot(s) end
-    elseif #passAllQueue > 0 then
-        local s = table.remove(passAllQueue, 1)
-        if sendPass then sendPass(s) end
+-- Returns the cache entry for slot only if it still holds the item itemKey names.
+local function findQueuedEntry(queued)
+    for _, entry in ipairs(cachedItems) do
+        if entry.slot == queued.slot then
+            return (entry.itemKey == queued.itemKey) and entry or nil
+        end
     end
+    return nil
 end
 
--- Fills lotAllQueue with slots where lot == 0; cancels any pending pass-all.
-function state.addLotAll(items)
-    passAllQueue = {}
-    lotAllQueue  = {}
-    for _, entry in ipairs(items) do
-        if entry.lot == 0 then
-            lotAllQueue[#lotAllQueue + 1] = entry.slot
+-- Called each frame. Sends at most one queued lot/pass per DRAIN_INTERVAL;
+-- entries whose slot changed item or already carries a lot/pass are skipped.
+-- sendLot(slot) and sendPass(slot) are callbacks from TreasurePool.lua; lot
+-- canLot() false discards the remaining lot queue and returns 'lotBlocked'.
+function state.drainQueues(sendLot, sendPass, canLot)
+    local now = socket.gettime()
+    if now - lastDrainAt < DRAIN_INTERVAL then return end
+
+    if #lotAllQueue > 0 and canLot and not canLot() then
+        lotAllQueue = {}
+        return 'lotBlocked'
+    end
+    while #lotAllQueue > 0 do
+        local queued = table.remove(lotAllQueue, 1)
+        local entry  = findQueuedEntry(queued)
+        if entry and entry.lot == 0 and not entry.rareOwned then
+            lastDrainAt = now
+            if sendLot then sendLot(queued.slot) end
+            return
+        end
+    end
+    while #passAllQueue > 0 do
+        local queued = table.remove(passAllQueue, 1)
+        local entry  = findQueuedEntry(queued)
+        if entry and entry.lot == 0 then
+            lastDrainAt = now
+            if sendPass then sendPass(queued.slot) end
+            return
         end
     end
 end
 
--- Fills passAllQueue with slots where lot == 0; cancels any pending lot-all.
+-- Queues every cached entry with no lot that the player does not already own
+-- (Rare); cancels any pending pass-all.
+function state.addLotAll(items)
+    passAllQueue = {}
+    lotAllQueue  = {}
+    for _, entry in ipairs(items) do
+        if entry.lot == 0 and not entry.rareOwned then
+            lotAllQueue[#lotAllQueue + 1] = { slot = entry.slot, itemKey = entry.itemKey }
+        end
+    end
+end
+
+-- Queues every cached entry with no lot or pass; cancels any pending lot-all.
 function state.addPassAll(items)
     lotAllQueue  = {}
     passAllQueue = {}
     for _, entry in ipairs(items) do
         if entry.lot == 0 then
-            passAllQueue[#passAllQueue + 1] = entry.slot
+            passAllQueue[#passAllQueue + 1] = { slot = entry.slot, itemKey = entry.itemKey }
         end
     end
 end
@@ -514,18 +534,12 @@ function state.isPassAllActive()
 end
 
 function state.reset()
-    memberLots              = {}
-    memberLotItemKeys       = {}
     lotAllQueue             = {}
     passAllQueue            = {}
-    frameCount              = 0
+    lastDrainAt             = 0
     cachedItems             = {}
     pendingRareRecomputeAll = false
     pendingRareRecomputeIds = {}
-end
-
-function state.getMemberLots()
-    return memberLots
 end
 
 return state

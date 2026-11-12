@@ -60,7 +60,7 @@ local VIS_COLLAPSE = 4
 -- ALL flags are true), so neither overrides the other.
 local VIS_POOL = 5
 
--- Callbacks (set by treasurepool.lua)
+-- Callbacks (set by TreasurePool.lua)
 lootWindow.onLotSlot      = nil
 lootWindow.onPassSlot     = nil
 lootWindow.onLotAll       = nil
@@ -416,11 +416,15 @@ function lootWindow.update(items, passAllActive)
     end
 
     -- Update each item
-    local hasPending = false
+    local hasPending  = false
+    local hasLottable = false
     for i, item in ipairs(lootItems) do
         if items[i] then
             item:update(items[i], hoveredIdx == i)
-            if items[i].lot == 0 then hasPending = true end
+            if items[i].lot == 0 then
+                hasPending = true
+                if not items[i].rareOwned then hasLottable = true end
+            end
         end
     end
 
@@ -428,7 +432,7 @@ function lootWindow.update(items, passAllActive)
     -- Pass All is dominant: while it drains, Lot All is locked out.
     -- Lot All draining keeps Pass All visible so the user can still bail/interrupt.
     if hasPending then
-        if passAllActive or not lootWindow.lotAllEnabled then
+        if passAllActive or not hasLottable or not lootWindow.lotAllEnabled then
             lotAllBtn:hide(utils.VIS_TOKEN)
         else
             lotAllBtn:show(utils.VIS_TOKEN)

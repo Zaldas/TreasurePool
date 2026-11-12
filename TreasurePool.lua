@@ -2,11 +2,10 @@ addon.name      = 'TreasurePool'
 addon.author    = 'Shiyo, Zaldas'
 addon.version   = '2.8'
 addon.desc      = 'Displays your current treasure pool with lot/pass buttons.'
-addon.link      = 'https://ashitaxi.com/'
+addon.link      = 'https://github.com/Zaldas/TreasurePool'
 
 require('common')
 local settings   = require('settings')
-local bit        = require('bit')
 local chat       = require('chat')
 
 local lootWindow     = require('elements/lootWindow')
@@ -14,6 +13,7 @@ local settingsWindow = require('elements/settingsWindow')
 local lotDetails     = require('elements/lotDetails')
 local itemTooltip    = require('elements/itemTooltip')
 local state          = require('state')
+local sprites        = require('libs/spui/sprites')
 local layout         = require('layouts/default')
 
 ------------------------------------------------------------
@@ -24,7 +24,6 @@ local defaultSettings = T{
         x = 200,
         y = 200,
     },
-    showLotButtons    = true,
     lockPosition      = false,
     collapsible       = true,
     collapsed         = false,
@@ -82,28 +81,14 @@ local function getPlayerName()
     return (type(name) == 'string' and #name > 0) and name or 'You'
 end
 
-local function buildPartyLotsForSlot(slotIdx)
-    local result = {}
-    local memberLots = state.getMemberLots()[slotIdx]
-    if not memberLots then
-        return result
-    end
-    for name, info in pairs(memberLots) do
-        if type(name) == 'string' and #name >= 3 and type(info) == 'table' then
-            if info.passed then
-                result[name] = state.LOT_PASSED
-            elseif type(info.lot) == 'number' then
-                result[name] = info.lot
-            end
-        end
-    end
-    return result
-end
-
 local function isInventoryFull()
     local inv = AshitaCore:GetMemoryManager():GetInventory()
     if not inv then return false end
     return inv:GetContainerCount(0) >= inv:GetContainerCountMax(0)
+end
+
+local function canLot()
+    return not isInventoryFull()
 end
 
 -- Compute getEffectiveScale() from screen resolution (1440p baseline)
@@ -148,8 +133,8 @@ local dTreasurePool = {
 -- Packet Sending Helpers
 ------------------------------------------------------------
 local function sendLotPacket(slotIndex)
-    -- The server rolls the lot value server-side; the client does not send one
-    -- (trailing bytes are padding, per XiPackets 0x0041 / LSB 0x041_trophy_entry.cpp).
+    -- The server rolls the lot value server-side; the client does not send one.
+    -- Byte 4 is the pool slot, byte 5 is PropertyItemIndex (sent as 0), per XiPackets 0x0041.
     AshitaCore:GetPacketManager():AddOutgoingPacket(0x0041, {
         0x41, 0x04, 0x00, 0x00,
         slotIndex, 0x00, 0x00, 0x00,
@@ -159,7 +144,7 @@ end
 local function sendPassPacket(slotIndex)
     AshitaCore:GetPacketManager():AddOutgoingPacket(0x0042, {
         0x42, 0x04, 0x00, 0x00,
-        slotIndex, 0x00,
+        slotIndex, 0x00, 0x00, 0x00,
     })
 end
 
@@ -187,13 +172,14 @@ local function gatherTreasureData()
                 winnerName = ''  -- match state.buildItemFromPacket's convention (no winner shown)
             end
 
-            -- DropTime is the server Unix timestamp when the item entered the pool.
-            -- TimeToLive is in an unknown unit (not seconds), so derive expiry from DropTime.
-            local dropRem  = item.DropTime + state.POOL_TTL - os.time()
-            local expiresAt = (dropRem >= 0 and dropRem <= 310) and (item.DropTime + state.POOL_TTL) or (os.time() + state.POOL_TTL)
+            -- DropTime is not wall-clock time, so expiry is counted from now.
+            local expiresAt = os.time() + state.POOL_TTL
 
             result[#result + 1] = {
                 slot       = i,
+                -- DropTime is expected to equal 0x00D2 StartTime; a mismatch only
+                -- means a later rebroadcast starts a fresh entry.
+                itemKey    = state.makeItemKey(item.ItemId, item.DropTime),
                 itemId     = item.ItemId,
                 name       = itemName,
                 lot        = item.Lot,
@@ -201,7 +187,7 @@ local function gatherTreasureData()
                 winnerName = winnerName,
                 expiresAt  = expiresAt,
                 playerName = playerName,
-                partyLots  = buildPartyLotsForSlot(i),
+                partyLots  = {},
             }
         end
     end
@@ -265,8 +251,7 @@ local function wireCallbacks()
 
     lootWindow.onLotAll = function()
         if settingsOpen[1] then
-            state.addLotAll(gatherDebugData())
-            print(chat.header('TreasurePool') .. chat.message('Debug: Lot All queued'))
+            print(chat.header('TreasurePool') .. chat.message('Debug: Lot All'))
             return
         end
 
@@ -275,27 +260,14 @@ local function wireCallbacks()
             return
         end
 
-        local resMgr   = AshitaCore:GetResourceManager()
-        local items    = gatherTreasureData()
-        local lottable = {}
-
-        for _, entry in ipairs(items) do
-            if entry.lot ~= 0 then goto continue end
-            local resource = resMgr:GetItemById(entry.itemId)
-            local isRare   = resource and bit.band(resource.Flags, 0x8000) ~= 0
-            if isRare and state.playerOwnsRareItem(entry.itemId) then goto continue end
-            lottable[#lottable + 1] = entry
-            ::continue::
-        end
-
-        state.addLotAll(lottable)
+        state.addLotAll(state.getItems())
     end
 
     lootWindow.onPassAll = function()
-        local items = settingsOpen[1] and gatherDebugData() or gatherTreasureData()
-        state.addPassAll(items)
         if settingsOpen[1] then
-            print(chat.header('TreasurePool') .. chat.message('Debug: Pass All queued'))
+            print(chat.header('TreasurePool') .. chat.message('Debug: Pass All'))
+        else
+            state.addPassAll(state.getItems())
         end
     end
 
@@ -318,7 +290,12 @@ end
 
 local function rebuildWindow()
     lootWindow.destroy()
-    lootWindow.initialize(layout, getActiveBgDef(), tpSettings.anchor, getEffectiveScale())
+    local ok, err = pcall(lootWindow.initialize, layout, getActiveBgDef(), tpSettings.anchor, getEffectiveScale())
+    if not ok then
+        print(chat.header('TreasurePool') .. chat.warning(string.format('Theme %s failed to build (%s); using Plain.', tostring(tpSettings.theme), tostring(err))))
+        lootWindow.destroy()
+        lootWindow.initialize(layout, layout.themes and layout.themes['Plain'], tpSettings.anchor, getEffectiveScale())
+    end
     lootWindow.dragEnabled = tpSettings.lockPosition ~= true
     wireCallbacks()
     local isCollapsible = tpSettings.collapsible == true
@@ -358,12 +335,14 @@ end)
 -- Event: Unload
 ------------------------------------------------------------
 ashita.events.register('unload', 'unload_cb', function()
-    lootWindow.destroy()
-    state.reset()
+    settings.unregister('settings', 'settings_update')
     ashita.events.unregister('d3d_present', 'present_cb')
     ashita.events.unregister('mouse', 'mouse_cb')
     ashita.events.unregister('packet_in', 'treasurepool_packet_in')
     ashita.events.unregister('command', 'treasurepool_command')
+    lootWindow.destroy()
+    state.reset()
+    sprites.dispose()
 end)
 
 ------------------------------------------------------------
@@ -378,7 +357,9 @@ ashita.events.register('d3d_present', 'present_cb', function()
     end
 
     -- Drain lot/pass all queues
-    state.drainQueues(sendLotPacket, sendPassPacket)
+    if state.drainQueues(sendLotPacket, sendPassPacket, canLot) == 'lotBlocked' then
+        print(chat.header('TreasurePool') .. chat.warning('Inventory full - Lot All stopped.'))
+    end
 
     -- Prune items that expired >30s ago (safety net for missed clear packets)
     local now = os.time()

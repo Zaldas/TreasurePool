@@ -1,3 +1,5 @@
+local chat = require('chat')
+
 local WINDOW_W    = 300
 local HEADER_H    = 26
 local ROW_H       = 37
@@ -230,6 +232,42 @@ local layout = {
 --
 -- Themes are auto-loaded from layouts/themes/*.lua — drop a file in to add one.
 -- Each file returns a theme definition table; the filename (minus .lua) is the theme name.
+-- Themes missing their mode's required fields are skipped with a chat warning; no mode renders flat.
+local function isNumberPair(t)
+    return type(t) == 'table' and type(t[1]) == 'number' and type(t[2]) == 'number'
+end
+
+local function validateTheme(def)
+    if type(def) ~= 'table' then
+        return string.format('returned %s, expected a table', type(def))
+    end
+    if def.mode == '3slice' then
+        for _, key in ipairs({ 'imgTop', 'imgMid', 'imgBottom' }) do
+            local img = def[key]
+            if type(img) ~= 'table' then
+                return string.format('3slice theme is missing %s', key)
+            end
+            if type(img.path) ~= 'string' or not isNumberPair(img.size) or not isNumberPair(img.pos) then
+                return string.format('%s needs path, size {w, h} and pos {x, y}', key)
+            end
+        end
+    elseif def.mode == 'window' then
+        if type(def.bgPath) ~= 'string' then
+            return 'window theme is missing bgPath'
+        end
+        if def.borderSet ~= nil and type(def.borderSet) ~= 'string' then
+            return 'borderSet must be a string'
+        end
+    elseif def.mode ~= nil and def.mode ~= 'flat' then
+        return string.format('unknown mode %s', tostring(def.mode))
+    end
+    return nil
+end
+
+local function warnTheme(filename, reason)
+    print(chat.header('TreasurePool') .. chat.warning(string.format('Skipped theme %s: %s', filename, reason)))
+end
+
 local function loadThemes()
     local themes = {}
 
@@ -239,14 +277,22 @@ local function loadThemes()
 
     if not ashita.fs.exists(themesDir) then return themes end
 
-    local contents = ashita.fs.get_directory(themesDir, '.*\\.lua')
+    local contents = ashita.fs.get_directory(themesDir, '^.*\\.lua$') or {}
     for _, filename in pairs(contents) do
-        local name = string.sub(filename, 1, -5)
-        if #name > 0 then
+        local name = filename:match('^(.+)%.lua$')
+        if name then
             local modPath = 'layouts/themes/' .. name
             package.loaded[modPath] = nil
             local ok, def = pcall(require, modPath)
-            if ok and type(def) == 'table' then
+            local reason
+            if ok then
+                reason = validateTheme(def)
+            else
+                reason = tostring(def)
+            end
+            if reason then
+                warnTheme(filename, reason)
+            else
                 themes[name] = def
             end
         end

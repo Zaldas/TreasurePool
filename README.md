@@ -14,7 +14,7 @@ TreasurePool shows every item currently in the loot pool alongside a live countd
 
 - Live countdown timer bar per item with urgency color shifts
 - Lot/Pass buttons appear on hover; suppressed when already actioned
-- **Lot All** / **Pass All** footer buttons for batch actions
+- **Lot All** / **Pass All** footer buttons for batch actions (the HorizonXI download, `TreasurePool-HXI.zip`, has Pass All only)
 - Rare item ownership detection — lot button is suppressed and item name turns red if you already own a Rare item in the pool
 - **Lot Details popup** — click any item row to see every party and alliance member's lot/pass status
 - **Item tooltip** on hover — shows item description, equip level, and usable jobs
@@ -22,7 +22,7 @@ TreasurePool shows every item currently in the loot pool alongside a live countd
 - 11 built-in themes plus support for custom themes
 - Custom UI scale with auto-detect from resolution (1440p baseline)
 - Alliance-aware: supports up to 18 members across three parties
-- Packet-driven state — zero memory reads per frame during normal rendering
+- Packet-driven state — the pool is updated from server packets, not polled every frame
 
 ---
 
@@ -108,10 +108,27 @@ The **Theme** dropdown in settings lists all available themes. Custom themes app
 
 ## Fonts
 
-TreasurePool uses three fonts that must be installed before launching the game client. They are included in the release download.
+TreasurePool uses three fonts that must be installed before launching the game client. Penumbra Serif Std and Grammara are attached to each release as separate downloads; Tahoma ships with Windows.
 
 | Font | Used for |
 |------|----------|
 | Penumbra Serif Std | Window title |
 | Grammara | Item countdown timers |
 | Tahoma | Item names, status text, buttons |
+
+---
+
+## License
+
+**MIT** — see [LICENSE](LICENSE).
+
+TreasurePool bundles two libraries, each of which keeps its own notice:
+
+| Path | License | Copyright |
+|---|---|---|
+| everything not listed below | MIT | © 2026 Zaldas |
+| [`libs/spui/`](libs/spui/LICENSE) | BSD 3-Clause | © 2023 Tylas ([XivParty](https://github.com/Tylas11/XivParty)) |
+| [`libs/gdifonts/`](libs/gdifonts/LICENSE) | MIT | © 2023 ThornyFFXI |
+
+`libs/spui/classes.lua` is in turn based on Paul Moore's classes library, © 2011 Strange
+Ideas Software (MIT).

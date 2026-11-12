@@ -22,7 +22,8 @@ function settingsWindow.draw(tpSettings, settingsOpen, themeList, callbacks)
                 uiTheme.header('Display')
 
                 imgui.Indent(uiTheme.indent)
-                local themeIdx = { 0 }
+                -- An unknown saved theme renders as Plain (getActiveBgDef) and shows no selection here.
+                local themeIdx = { -1 }
                 for i, t in ipairs(themeList) do
                     if t == (tpSettings.theme or 'Plain') then themeIdx[1] = i - 1; break end
                 end
@@ -49,7 +50,7 @@ function settingsWindow.draw(tpSettings, settingsOpen, themeList, callbacks)
                     settings.save()
                     lootWindow.setCollapsible(collapsibleOn[1])
                 end
-                uiTheme.helpMarker('Click the loot window header to collapse it.')
+                uiTheme.helpMarker('Click the arrow on the loot window header to collapse it.')
 
                 local customScaleOn = { (tpSettings.scale or 0) > 0 }
                 if imgui.Checkbox('Custom scale', customScaleOn) then
@@ -62,7 +63,7 @@ function settingsWindow.draw(tpSettings, settingsOpen, themeList, callbacks)
                     imgui.Indent(uiTheme.subIndent)
                     local scaleVal = { tpSettings.scale > 0 and tpSettings.scale or 1.0 }
                     imgui.SetNextItemWidth(120)
-                    if imgui.SliderFloat('##scale', scaleVal, 0.25, 2.5, 'x%.2f') then
+                    if imgui.SliderFloat('##scale', scaleVal, 0.25, 2.5, 'x%.2f', ImGuiSliderFlags_AlwaysClamp) then
                         tpSettings.scale = scaleVal[1]
                         callbacks.onRebuild()
                     end
@@ -166,7 +167,7 @@ function settingsWindow.draw(tpSettings, settingsOpen, themeList, callbacks)
     local n = uiTheme.push()
     imgui.SetNextWindowSizeConstraints({ 270, 0 }, { 270, 9999 })
     local ok, err = true, nil
-    if imgui.Begin('TreasurePool.' .. addon.version, settingsOpen, ImGuiWindowFlags_AlwaysAutoResize) then
+    if imgui.Begin(string.format('TreasurePool.%s###tp_cfg', addon.version), settingsOpen, ImGuiWindowFlags_AlwaysAutoResize) then
         ok, err = pcall(drawBody)
     end
     imgui.End()

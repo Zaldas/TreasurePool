@@ -153,17 +153,21 @@ function lootItem:update(entry, isHovered)
 
     -- Icon texture + Rare/Ex flags: only look up the resource when the item
     -- changes. Reset when the slot is vacated (itemId == 0) so the next item
-    -- triggers a reload and doesn't inherit stale Rare/Ex flags.
+    -- triggers a reload and doesn't inherit stale Rare/Ex flags or icon.
     if not entry.itemId or entry.itemId == 0 then
         private[self].lastIconItemId = nil
         private[self].isRare = false
         private[self].isEx   = false
+        self.iconImg:hide(utils.VIS_TOKEN)
     elseif entry.itemId ~= private[self].lastIconItemId then
         private[self].lastIconItemId = entry.itemId
         local resItem = AshitaCore:GetResourceManager():GetItemById(entry.itemId)
         if resItem and resItem.ImageSize and resItem.ImageSize > 0 then
             local tex, w, h = private[self].engine:loadImageFromMemory(resItem.Bitmap, resItem.ImageSize, entry.itemId)
             self.iconImg:setTexture(tex, w, h)
+            self.iconImg:show(utils.VIS_TOKEN)
+        else
+            self.iconImg:hide(utils.VIS_TOKEN)
         end
         local flags = resItem and resItem.Flags or 0
         private[self].isRare = bit.band(flags, 0x8000) ~= 0
