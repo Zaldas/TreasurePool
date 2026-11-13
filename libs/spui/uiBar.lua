@@ -45,6 +45,7 @@ function uiBar:init(layout, engine, value)
         self.value = value
         self.exactValue = value
         self.currentValue = nil
+        self.roundedValue = utils:round(value, 3) -- value rounded like currentValue; the settle comparison target
 
         self.animSpeed = (self.layout.animSpeed and self.layout.animSpeed > 0) and self.layout.animSpeed or 1
 
@@ -72,6 +73,7 @@ end
 
 function uiBar:setValue(value)
     self.value = math.min(math.max(value, 0), 1)
+    self.roundedValue = utils:round(self.value, 3)
 end
 
 -- sets the color of the bar image
@@ -89,9 +91,14 @@ end
 function uiBar:update()
     if not self.isEnabled then return end
 
-    if self.currentValue ~= self.value then
+    -- currentValue is rounded to 3 decimals, so it is compared against the equally rounded target
+    if self.currentValue ~= self.roundedValue then
         self.exactValue = self.exactValue + (self.value - self.exactValue) * self.animSpeed
         self.exactValue = math.min(math.max(self.exactValue, 0), 1)
+        -- snap within half a rounding step so a target on a .xxx5 boundary still settles
+        if math.abs(self.value - self.exactValue) < 0.0005 then
+            self.exactValue = self.value
+        end
         self.currentValue = utils:round(self.exactValue, 3)
 
         if self.imgBar then

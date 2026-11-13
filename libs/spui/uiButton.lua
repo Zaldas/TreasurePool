@@ -91,6 +91,7 @@ function uiButton:_updateColor()
 end
 
 function uiButton:setHover(v)
+    if not self.isEnabled then return end
     if self.isHover ~= v then
         self.isHover = v
         self:_updateColor()
@@ -98,6 +99,7 @@ function uiButton:setHover(v)
 end
 
 function uiButton:setPressed(v)
+    if not self.isEnabled then return end
     if self.isDown ~= v then
         self.isDown = v
         self:_updateColor()
@@ -105,6 +107,7 @@ function uiButton:setPressed(v)
 end
 
 function uiButton:setEnabled(v)
+    if not self.isEnabled then return end
     if self.btnEnabled ~= v then
         self.btnEnabled = v
         self:_updateColor()
@@ -118,7 +121,7 @@ function uiButton:setText(str)
 end
 
 function uiButton:hitTest(mx, my)
-    if not self.btnEnabled then return false end
+    if not self.isEnabled or not self.btnEnabled then return false end
     if not self.absoluteVisibility then return false end
 
     local ax = self.absolutePos.x
